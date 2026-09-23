@@ -6,6 +6,14 @@ Simulates real quantum communication protocols—including **Generic State Telep
 
 ---
 
+## 🤖 Built with Artificial Intelligence
+
+This project was developed with the assistance of **AntiGravity (version 2.15.1)**, generating functional implementation code from natural language prompts and requirements. 
+
+All underlying system architecture, quantum computing logic, technical decisions, protocol rules, and iterative refinements required human supervision, domain knowledge, and careful curation.
+
+---
+
 ## 🚀 Quickstart
 
 ### 1. Install Dependencies
