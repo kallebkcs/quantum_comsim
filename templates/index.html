@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quantum Channel Simulator</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/socket.io.min.js"></script>
+  <script>
+    if (typeof io === "undefined") {
+      document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Top Navigation / Session Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <h1>⚛ Quantum Channel Simulator</h1>
+      <span class="subtitle">Multiplayer Quantum Protocol Sandbox (Teleportation, Superdense Coding, QKD BB84)</span>
+    </div>
+    <div class="header-controls">
+      <div class="control-group">
+        <label for="room-input">Room:</label>
+        <input type="text" id="room-input" value="quantum-lab" placeholder="Room ID">
+      </div>
+      <div class="control-group">
+        <label for="user-input">Handle:</label>
+        <input type="text" id="user-input" value="Alice" placeholder="Node Name">
+      </div>
+      <button id="btn-join" class="btn btn-primary">Join Room</button>
+      <button id="btn-reset-room" class="btn btn-danger" title="Clear room quantum state">Reset Room</button>
+      <div id="connection-status" class="status-badge disconnected">Disconnected</div>
+    </div>
+  </header>
+
+  <!-- Peers Bar -->
+  <div class="peers-bar">
+    <span class="peers-label">🌐 Connected Nodes:</span>
+    <div id="peers-list" class="peers-list">
+      <em>None</em>
+    </div>
+    <span class="qubits-summary">Global Active Qubits in Room: <strong id="active-qubits-count">0</strong></span>
+  </div>
+
+  <!-- Notification Banner -->
+  <div id="error-banner" class="error-banner" style="display: none;"></div>
+
+  <!-- Main Multi-Column Workspace -->
+  <main class="main-layout">
+
+    <!-- LEFT COLUMN: Quantum Laboratory & Inventory -->
+    <section class="quantum-lab-column">
+
+      <!-- Active Qubit Inventory -->
+      <div class="panel inventory-panel">
+        <div class="panel-header">
+          <h2>📦 Quantum Inventory (Your Qubits)</h2>
+          <div class="inventory-top-actions">
+            <button id="btn-select-all" class="btn btn-small">Select All</button>
+            <button id="btn-clear-selection" class="btn btn-small">Deselect All</button>
+          </div>
+        </div>
+
+        <div class="selection-pill" id="selection-pill">
+          <span>No qubits selected</span>
+        </div>
+
+        <p class="panel-desc">
+          Click cards to multi-select for batch operations. Use <strong>[Set Control]</strong> & <strong>[Set Target]</strong> on cards for CNOT & Bell measurements.
+        </p>
+
+        <div id="qubits-container" class="qubits-grid">
+          <div class="empty-state">No qubits in your inventory. Prepare one below!</div>
+        </div>
+      </div>
+
+      <!-- Action Center Tabs -->
+      <div class="panel actions-panel">
+        <div class="panel-header">
+          <h2>⚡ Quantum Operations Console</h2>
+        </div>
+
+        <!-- 1. State Preparation -->
+        <div class="action-section">
+          <h3>1. State Preparation</h3>
+          <p class="section-desc">Instantly prepare pure basis states, entangled Bell pairs, or a generic real state.</p>
+          
+          <div class="btn-row">
+            <span class="btn-subgroup-title">Basis States:</span>
+            <button class="btn btn-prep" data-prep="0">|0⟩</button>
+            <button class="btn btn-prep" data-prep="1">|1⟩</button>
+            <button class="btn btn-prep" data-prep="+">|+⟩</button>
+            <button class="btn btn-prep" data-prep="-">|-⟩</button>
+          </div>
+
+          <div class="btn-row" style="margin-top: 8px;">
+            <span class="btn-subgroup-title">Bell Pairs (EPR):</span>
+            <button class="btn btn-bell" data-prep="phi+" title="|Φ+⟩ ↔ 10 (or 00 in Superdense)">|Φ+⟩</button>
+            <button class="btn btn-bell" data-prep="phi-" title="|Φ-⟩ ↔ 11 (or 10 in Superdense)">|Φ-⟩</button>
+            <button class="btn btn-bell" data-prep="psi+" title="|Ψ+⟩ ↔ 00 (or 01 in Superdense)">|Ψ+⟩</button>
+            <button class="btn btn-bell" data-prep="psi-" title="|Ψ-⟩ ↔ 01 (or 11 in Superdense)">|Ψ-⟩</button>
+          </div>
+
+          <!-- Generic State Builder with Slider -->
+          <div class="generic-state-builder">
+            <div class="generic-header">
+              <strong>Generic State: |ψ⟩ = α|0⟩ + β|1⟩</strong>
+              <span id="prob-rule-check" class="badge-prob">α² + β² = 1.000</span>
+            </div>
+            
+            <div class="slider-row">
+              <label for="theta-slider">Angle θ (0°–180°):</label>
+              <input type="range" id="theta-slider" min="0" max="180" value="73.74" step="0.5">
+              <span id="theta-display">73.7°</span>
+              <button id="btn-toggle-sign" class="btn btn-small" title="Toggle sign of β">β Sign: (+)</button>
+            </div>
+
+            <div class="state-math-display">
+              <span class="formula" id="generic-formula">|ψ⟩ = 0.800|0⟩ + 0.600|1⟩</span>
+              <span class="probs" id="generic-probs">P(0) = 64.0% | P(1) = 36.0%</span>
+              <button id="btn-prepare-generic" class="btn btn-primary" style="margin-left: auto;">Prepare Generic State |ψ⟩</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Quantum Gates (Single & Batch) -->
+        <div class="action-section">
+          <h3>2. Quantum Gates</h3>
+          <p class="section-desc">Single-qubit gates apply to <strong>ALL selected qubits</strong> and auto-deselect after application. CNOT follows Control-Target rule.</p>
+          <div class="btn-row">
+            <button id="btn-gate-x" class="btn btn-gate" disabled>Pauli-X (NOT)</button>
+            <button id="btn-gate-z" class="btn btn-gate" disabled>Pauli-Z (Phase Flip)</button>
+            <button id="btn-gate-h" class="btn btn-gate" disabled>Hadamard (H)</button>
+            <button id="btn-gate-cnot" class="btn btn-gate-2q" disabled>CNOT (Control → Target)</button>
+          </div>
+        </div>
+
+        <!-- 3. Quantum Transmission (Single & Batch) -->
+        <div class="action-section">
+          <h3>3. Quantum Channel Transmission</h3>
+          <p class="section-desc">Transmit all selected qubits to another node simultaneously. Recipient receives <em>Unknown Qubit |ψ⟩</em>.</p>
+          <div class="transmit-row">
+            <label for="recipient-select">Send to:</label>
+            <select id="recipient-select" disabled>
+              <option value="">-- Select Recipient Node --</option>
+            </select>
+            <button id="btn-send-qubit" class="btn btn-action" disabled>Transmit Selected via Quantum Channel ✈</button>
+          </div>
+        </div>
+
+        <!-- 4. Measurement Console -->
+        <div class="action-section">
+          <h3>4. Measurement (Single & Batch Collapse)</h3>
+          <p class="section-desc">Measures all selected qubits. Diagonal basis outcomes display strictly <strong>+</strong> or <strong>-</strong>.</p>
+          <div class="btn-row">
+            <button id="btn-measure-z" class="btn btn-measure" disabled>Measure Selected in Z [0/1]</button>
+            <button id="btn-measure-x" class="btn btn-measure" disabled>Measure Selected in X [+/-]</button>
+            <button id="btn-measure-bell" class="btn btn-measure-bell" disabled>Bell Basis (Control + Target)</button>
+          </div>
+
+          <!-- Custom Basis Sequence Measurement -->
+          <div class="custom-measure-row" style="margin-top: 10px;">
+            <label for="batch-measure-bases">Custom Bases:</label>
+            <input type="text" id="batch-measure-bases" placeholder="e.g. Z X X Z X" style="flex: 1;">
+            <button id="btn-measure-custom" class="btn btn-measure" disabled>Measure with Sequence</button>
+          </div>
+        </div>
+
+        <!-- 5. Automated Qubit Encoder (Batch QKD Pipeline) -->
+        <div class="action-section">
+          <h3>5. Automated Qubit Encoding Pipeline</h3>
+          <p class="section-desc">Automatize qubit sequence generation: Bit Sequence + Basis Sequence = Encoded Qubit Sequence.</p>
+          <div class="pipeline-inputs">
+            <div class="input-field">
+              <label for="pipeline-bits">Bit Sequence (0s & 1s):</label>
+              <input type="text" id="pipeline-bits" placeholder="e.g. 0 1 1 0 1 0" value="0 1 1 0 1 0">
+            </div>
+            <div class="input-field">
+              <label for="pipeline-bases">Basis Sequence (Z & X):</label>
+              <input type="text" id="pipeline-bases" placeholder="e.g. Z X X Z X Z" value="Z X X Z X Z">
+            </div>
+            <button id="btn-batch-encode" class="btn btn-primary">Encode & Prepare Qubits</button>
+          </div>
+        </div>
+
+        <!-- 6. Local Node Tools (QKD Helpers) -->
+        <div class="action-section">
+          <h3>6. Local Tools for Any Node</h3>
+          <p class="section-desc">Independent offline tools for basis comparison, sifted key generation, and random sequences.</p>
+
+          <!-- Basis Comparer -->
+          <div class="tool-subcard">
+            <h4>🔍 Basis Comparison Tool</h4>
+            <div class="tool-row">
+              <input type="text" id="comp-bases-a" placeholder="Basis Sequence 1 (e.g. Alice: Z X X Z X Z)">
+              <input type="text" id="comp-bases-b" placeholder="Basis Sequence 2 (e.g. Bob: Z Z X X X Z)">
+              <button id="btn-compare-bases" class="btn btn-action">Compare Bases</button>
+            </div>
+            <div id="compare-results" class="tool-results" style="display: none;"></div>
+          </div>
+
+          <!-- Random Sequence Generator -->
+          <div class="tool-subcard" style="margin-top: 10px;">
+            <h4>🎲 Random Bit & Basis Generator</h4>
+            <div class="tool-row">
+              <label for="rand-bits-count">Length (N):</label>
+              <input type="number" id="rand-bits-count" value="8" min="1" max="64" style="width: 70px;">
+              <button id="btn-generate-random" class="btn btn-action">Generate Random</button>
+              <button id="btn-load-encoder" class="btn btn-small" style="display: none;">Load to Encoder</button>
+              <button id="btn-load-measure" class="btn btn-small" style="display: none;">Load to Multi-Measure</button>
+            </div>
+            <div id="random-results" class="tool-results" style="display: none;"></div>
+          </div>
+
+          <!-- EPR & Bell States Reference Table -->
+          <div class="tool-subcard" style="margin-top: 10px;">
+            <div class="toggle-header" id="btn-toggle-epr-table">
+              <h4>📖 EPR State ↔ Two-Bit String Reference Legend ▼</h4>
+            </div>
+            <div id="epr-reference-table" class="reference-table-container">
+              <table class="ref-table">
+                <thead>
+                  <tr>
+                    <th>Bell State</th>
+                    <th>Wavefunction</th>
+                    <th>Lecture / Protocol Encoding</th>
+                    <th>Superdense Coding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>|Ψ+⟩</strong></td>
+                    <td>( |01⟩ + |10⟩ ) / √2</td>
+                    <td><span class="badge-bit">00</span></td>
+                    <td><span class="badge-bit alt">01</span> (X gate)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Ψ-⟩</strong></td>
+                    <td>( |01⟩ - |10⟩ ) / √2</td>
+                    <td><span class="badge-bit">01</span></td>
+                    <td><span class="badge-bit alt">11</span> (ZX gate)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Φ+⟩</strong></td>
+                    <td>( |00⟩ + |11⟩ ) / √2</td>
+                    <td><span class="badge-bit">10</span></td>
+                    <td><span class="badge-bit alt">00</span> (Identity I)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Φ-⟩</strong></td>
+                    <td>( |00⟩ - |11⟩ ) / √2</td>
+                    <td><span class="badge-bit">11</span></td>
+                    <td><span class="badge-bit alt">10</span> (Z gate)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Collapsed Classical Bits & Joint Bell Outcomes -->
+      <div class="panel classical-register-panel">
+        <div class="panel-header">
+          <h2>💾 Classical Register (Collapsed Bits & Joint Bell Outcomes)</h2>
+          <button id="btn-clear-bits" class="btn btn-small">Clear Register</button>
+        </div>
+        <p class="panel-desc">Measurement outcomes collapsed into classical bits. Share results in the Classical Channel to complete protocols!</p>
+        
+        <div id="classical-bits-container" class="bits-grid">
+          <div class="empty-state">No measured bits yet.</div>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- RIGHT COLUMN: Communication Channels & Interactive Tomography -->
+    <section class="comms-column">
+
+      <!-- Sampling & Tomography Modal / Card -->
+      <div id="tomography-panel" class="panel tomography-panel" style="display: none;">
+        <div class="panel-header">
+          <h2>📊 Quantum State Tomography (Histogram)</h2>
+          <button id="btn-close-tomography" class="btn btn-small">✕</button>
+        </div>
+        <p class="panel-desc" id="tomography-desc">Simulated sampling of received state to estimate |α|² and |β|².</p>
+        
+        <div id="histogram-container" class="histogram-container"></div>
+        
+        <div class="tomo-actions">
+          <button id="btn-share-histogram" class="btn btn-primary btn-small">Share Reconstructed State in Chat</button>
+        </div>
+      </div>
+
+      <!-- Classical Channel (Chat) -->
+      <div class="panel chat-panel">
+        <div class="panel-header">
+          <h2>📞 Classical Channel (Public Broadcast)</h2>
+          <span class="badge-channel classical">Classical Channel</span>
+        </div>
+        <p class="panel-desc">Required for sharing measurement bases in QKD, protocol confirmation, and teleportation correction bits.</p>
+
+        <div id="chat-messages" class="messages-container"></div>
+
+        <form id="chat-form" class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Broadcast a classical message..." autocomplete="off">
+          <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+      </div>
+
+      <!-- Quantum Channel Activity Log -->
+      <div class="panel activity-panel">
+        <div class="panel-header">
+          <h2>⚛ Quantum Channel Activity Feed</h2>
+          <span class="badge-channel quantum">Quantum Channel</span>
+        </div>
+        <p class="panel-desc">Real-time log of state preparation, gate evolution, quantum particle transfers, and measurement collapses.</p>
+
+        <div id="quantum-logs" class="logs-container"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
