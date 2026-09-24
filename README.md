@@ -1,8 +1,8 @@
 # ⚛ Real-Time Multiplayer Quantum Channel Simulator
 
-A web-based, real-time multiplayer quantum communication sandbox powered by **Python (Flask-SocketIO)**, **Qiskit**, and **Vanilla JavaScript**.
+A web-based, real-time multiplayer quantum communication simulator powered by **Python (Flask-SocketIO)**, **Qiskit**, and **Vanilla JavaScript**.
 
-Simulates real quantum communication protocols—including **Generic State Teleportation & State Tomography**, **Superdense Coding**, and **Automated Quantum Key Distribution (BB84)**—across multiple browser sessions.
+The simulator provides an interactive sandbox for multiple participants across independent browser sessions to construct, manipulate, transmit, and measure quantum subsystems across simulated quantum and classical channels.
 
 ---
 
@@ -14,91 +14,133 @@ All underlying system architecture, quantum computing logic, technical decisions
 
 ---
 
+## 🏗️ System Architecture & Quantum Mechanics Engine
+
+### 1. Quantum Cluster Subsystem Architecture (Memory Optimization)
+In real-world quantum communication protocols (such as BB84 QKD with 32 or 64 bits), the vast majority of transmitted qubits exist in unentangled product states. Storing all room qubits in a single global statevector leads to an exponential Hilbert space explosion:
+$$\dim(\mathcal{H}) = 2^N \quad (N = 32 \implies 2^{32} \times 16\text{ bytes} \approx 64\text{ GiB RAM})$$
+
+To eliminate memory bottlenecks, the backend implements an **isolated quantum cluster architecture**:
+- **Independent Subsystems**: When qubits are created independently (e.g. via single-qubit preparation or batch encoding), each resides in its own isolated cluster ($\dim = 2$).
+- **Dynamic Cluster Merging**: When an entangling gate (such as CNOT) or a two-qubit Bell measurement is executed across distinct clusters, the engine dynamically merges the respective clusters via tensor product:
+  $$\mathcal{H}_{\text{merged}} = \mathcal{H}_A \otimes \mathcal{H}_B$$
+- **Projective Subspace Slicing**: When any qubit within an entangled cluster is measured in the computational or diagonal basis, the engine projectively collapses that subsystem, extracts the measured classical eigenvalue, slices out the measured dimension, and renormalizes the remaining statevector.
+
+### 2. 0-Indexed Conventions
+All qubits and selection indices are strictly **0-indexed**:
+- Qubits are assigned visual and logical identifiers starting at `Qubit #0`, `Qubit #1`, `Qubit #2`...
+- When multiple qubits are selected, their badges display their exact 0-indexed selection order: `0`, `1`, `2`...
+- For multi-qubit gates (such as CNOT), the first selected qubit (`0`) is the **Control**, and all subsequent selections (`1..N`) act as **Targets**.
+
+### 3. Operator Privacy & Separation of Channels
+- **Private Quantum Feed**: Local quantum operations (state preparations, single-qubit gates, CNOT evolutions, non-destructive sampling, and measurements) are logged **only** to the operating node (`to=sid`). Other participants cannot observe private state manipulation.
+- **Quantum Channel (Particle Transfer)**: When qubits are transmitted to a peer, the recipient receives `Unknown Qubit |ψ⟩` (enforcing the quantum No-Cloning Theorem).
+- **Classical Channel (Public Chat)**: Used for public announcement of measurement bases (sifting), classical correction bits in teleportation, and shared secret key validation.
+
+---
+
 ## 🚀 Quickstart
 
-### 1. Install Dependencies
+### 1. Installation
+Ensure Python 3.9+ is installed, then install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 *(Dependencies: `flask`, `flask-socketio`, `simple-websocket`, `qiskit`, `numpy`)*
 
-### 2. Start the Server
+### 2. Run the Server
 ```bash
 python server.py
 ```
-The server starts on **`http://localhost:5000`**.
+The server starts by default on `http://localhost:5000`.
 
-### 3. Open Two Connected Browser Sessions
-- Open **Tab 1**: [http://localhost:5000/?user=Alice](http://localhost:5000/?user=Alice)
-- Open **Tab 2**: [http://localhost:5000/?user=Bob](http://localhost:5000/?user=Bob)
-
----
-
-## ✨ Features Added
-
-### 1. Generic State Preparation & Teleportation
-- **Interactive Angle Slider ($\theta \in [0^\circ, 180^\circ]$)**:
-  - Formulates $|\psi\rangle = \alpha|0\rangle + \beta|1\rangle$ where $\alpha = \cos(\theta/2)$ and $\beta = \pm\sin(\theta/2)$.
-  - Guaranteed to strictly satisfy the real probability rule: $|\alpha|^2 + |\beta|^2 = 1.000$.
-  - Displays real-time probabilities $P(0)$ and $P(1)$ alongside the mathematical state equation.
-  - Teleport this arbitrary superposition state to Bob using an EPR pair and classical corrections!
-
-### 2. Quantum State Tomography (Sampling & Histogram)
-- Any node possessing an unknown qubit $|ψ\rangle$ (e.g. Bob after teleportation) can click **`Sample 📊`**:
-  - Simulates non-destructive quantum sampling ($1000$ shots) on the target state.
-  - Displays a live **Histogram** comparing observed frequencies in Computational ($Z$) and Diagonal ($X$) bases.
-  - Reconstructs estimated amplitudes: $|\hat{\psi}\rangle \approx \hat{\alpha}|0\rangle + \hat{\beta}|1\rangle$.
-  - One-click **Share Reconstructed State in Chat** button to report tomography findings to the sender.
-
-### 3. Automated Qubit Encoding Pipeline (BB84)
-- **Bit Sequence + Basis Sequence $\implies$ Encoded Qubit Sequence**:
-  - Enter bits (e.g. `0 1 1 0 1 0`) and bases (e.g. `Z X X Z X Z`).
-  - Automatically prepares the corresponding quantum states:
-    - `0` + `Z` $\implies |0\rangle$
-    - `1` + `Z` $\implies |1\rangle$
-    - `0` + `X` $\implies |+\rangle$
-    - `1` + `X` $\implies |-\rangle$
-  - Instantly allocates all qubits in your active inventory in sequential order.
-
-### 4. Multi-Qubit Operations & Auto-Deselection
-- Select multiple qubits with checkboxes or **Select All**.
-- Click **Pauli-X**, **Pauli-Z**, or **Hadamard** to apply the gate to **all selected qubits simultaneously**.
-- Upon applying a gate, the qubits are **automatically deselected**.
-- Two-qubit gates (**CNOT**) continue to strictly adhere to the **Control-Target rule** using explicit role assignment buttons.
-
-### 5. Multi-Qubit Transmission (Batch Send)
-- Select multiple qubits in your inventory $\implies$ pick the recipient node $\implies$ click **Transmit Selected via Quantum Channel ✈**.
-- All selected qubits are transmitted in a single atomic network event. The recipient receives all of them as `Unknown Qubit |ψ⟩`.
-
-### 6. Multi-Qubit Measurement (Sequence Outcomes)
-- Measure multiple selected qubits simultaneously:
-  - Uniform basis (`All in Z` or `All in X`).
-  - Or enter a custom basis sequence string (e.g. `Z X X Z X`).
-- Returns the complete outcome sequence (e.g. `['1', '-', '-', '1', '-']`).
-- **Strict Diagonal Basis Display**: Measurements in the Diagonal ($X$) basis display strictly as **`+`** or **`-`**.
-
-### 7. Joint Bell Measurement & Encoded String Representation
-- When measuring in the Bell basis, the Classical Register presents a unified **Joint Bell Outcome Card**:
-  - Displays the collapsed Bell state ($|\Psi^+\rangle, |\Psi^-\rangle, |\Phi^+\rangle, |\Phi^-\rangle$).
-  - Displays the corresponding encoded two-bit string ($00, 01, 10, 11$).
-  - Displays both participating qubits in lecture order (e.g. Qubits #1 & #2) with individual control and target readings ($m_c, m_t$).
-  - Interactive **EPR Reference Legend** in the local tools section.
-
-### 8. Local Node Utilities (QKD Helpers)
-- **Basis Comparison Tool**:
-  - Compares two basis sequences (e.g. Alice's bases vs Bob's bases).
-  - Calculates matching positions, percentage, and outputs the sifted key index array `[0, 2, 4, 5]`.
-  - Includes visual side-by-side alignment table and copy/post to chat buttons.
-- **Random Sequence Generator**:
-  - Generates random bit sequences and random basis sequences of arbitrary length $N$.
-  - One-click buttons to load directly into the **Batch Encoder** or **Multi-Measurement** inputs.
+### 3. Open Connected Multi-User Sessions
+- **Alice**: [http://localhost:5000/?user=Alice](http://localhost:5000/?user=Alice)
+- **Bob**: [http://localhost:5000/?user=Bob](http://localhost:5000/?user=Bob)
 
 ---
 
-## 🧪 Testing
+## ⚛️ Supported Quantum Protocols & Workflows
 
-Run the automated integration test suite at any time:
+### 1. Quantum Teleportation (Full Bloch Sphere & 3-Basis State Tomography)
+Transmit an arbitrary quantum state $|\psi\rangle = \cos(\theta/2)|0\rangle + e^{i\phi}\sin(\theta/2)|1\rangle$ to a remote party using one shared EPR pair and two classical bits:
+1. **Prepare Entanglement**: Alice prepares an EPR pair $|\Phi^+\rangle$ (Qubits #0 & #1) and transmits Qubit #1 to Bob via the Quantum Channel.
+2. **Prepare Target State**: Alice configures a generic state $|\psi\rangle$ with polar angle $\theta$ and relative phase $\phi$ (e.g. $\theta = 60^\circ, \phi = 90^\circ \implies \frac{\sqrt{3}}{2}|0\rangle + \frac{i}{2}|1\rangle$) as Qubit #2. The builder instantly displays theoretical probabilities ($P_Z(0) = 75.0\%, P_X(0) = 50.0\%, P_Y(0) = 93.3\%$) and the Bloch vector components ($\langle X \rangle, \langle Y \rangle, \langle Z \rangle$).
+3. **Bell Measurement**: Alice selects Qubit #2 (Control) and Qubit #0 (Target), then clicks **`Bell Basis Measurement`**.
+4. **Classical Communication**: Alice sends her 2 measurement bits ($m_c, m_t$) to Bob in the Classical Channel.
+5. **Unitary Correction**: Bob applies the corresponding Pauli correction ($I, X, Z,$ or $ZX$) to his received Qubit #1.
+6. **State Tomography**: Bob selects Qubit #1 and clicks **`Sample Z-Basis`**, or opens the dropdown to run **`Sample X-Basis`**, **`Sample Y-Basis`**, or **`Complete Tomography (Z, X, Y)`**. Comparing Bob's empirical probabilities with Alice's theoretical values experimentally confirms successful teleportation over the full Bloch sphere!
+
+### 2. Superdense Coding (2 Classical Bits in 1 Transmitted Qubit)
+1. **Shared Entanglement**: Alice prepares a Bell pair $|\Phi^+\rangle$ (Qubits #0 & #1) and sends Qubit #1 to Bob.
+2. **Encoding**: Alice encodes a 2-bit message into her half (Qubit #0) by applying local gates:
+   - `00` $\implies I$ (State remains $|\Phi^+\rangle$)
+   - `01` $\implies Z$ (State becomes $|\Phi^-\rangle$)
+   - `10` $\implies X$ (State becomes $|\Psi^+\rangle$)
+   - `11` $\implies Y$ or $ZX$ (State becomes $|\Psi^-\rangle$)
+3. **Transmission**: Alice sends Qubit #0 to Bob across the Quantum Channel.
+4. **Decoding**: Bob selects Qubit #0 (Control) and Qubit #1 (Target) and clicks **`Bell Basis Measurement`**. Bob decodes the exact 2-bit string.
+
+### 3. Quantum Key Distribution (BB84 Protocol)
+Establish a shared cryptographic secret key between Alice and Bob with automated pipelines:
+1. **Random Generation**: Alice uses the **Random Bit & Basis Generator** tool to generate random bits and bases.
+2. **Automated Encoding**: Alice clicks **`Load to BB84 Encoder`** and clicks **`Encode Qubits`**.
+3. **Transmission**: Alice selects all encoded qubits and transmits them to Bob in a single batch.
+4. **Bob's Measurement**: Bob generates a random basis sequence, pastes it into **Custom Bases**, and clicks **`Measure with Sequence`**.
+5. **Basis Sifting**: In the Classical Channel, Alice and Bob announce their basis sequences. Both paste the sequences into the **Basis Comparison Tool** to identify matching positions.
+6. **Distillation**: Alice and Bob click **`Load to Key Extractor`**, paste their raw measurement results, and click **`Extract Secret Key`**. The tool automatically maps diagonal outcomes (`+` $\to 0$, `-` $\to 1$) and generates the identical sifted secret key!
+
+### 4. Quantum Secure Direct Communication (QSDC)
+Transmit secure messages directly using entangled pairs and checking for eavesdroppers:
+1. Prepare an array of EPR pairs.
+2. Send one qubit from each pair across the channel.
+3. Check channel security using decoy states and basis comparison.
+4. Encode the message on the remaining qubits using **`Apply Pauli String`** and measure in the Bell basis.
+
+### 5. Multipartite Entanglement: N-Qubit GHZ States
+Prepare and verify genuine $N$-qubit Greenberger-Horne-Zeilinger states:
+$$|GHZ_N\rangle = \frac{|00\dots0\rangle + |11\dots1\rangle}{\sqrt{2}}$$
+1. Set the number of qubits ($N \ge 3$) and click **`Prepare |GHZ_N⟩`**.
+2. Select all $N$ qubits and click **`Sample Z-Basis`**.
+3. The joint histogram verifies perfect non-local correlation: only outcomes $|00\dots0\rangle$ ($50\%$) and $|11\dots1\rangle$ ($50\%$) appear!
+
+---
+
+## 🛠️ Tool Console & Reference Features
+
+| Feature | Description |
+| :--- | :--- |
+| **Full Bloch Sphere State Builder** | Parametrize generic states via polar angle $\theta \in [0^\circ, 180^\circ]$ and phase angle $\phi \in [0^\circ, 360^\circ]$, featuring real-time calculation of Bloch vectors and theoretical probabilities ($P_Z, P_X, P_Y$). |
+| **Y-Basis Measurement & Tomography** | Rotate circular basis states ($|+i\rangle, |-i\rangle$) into computational basis via $H S^\dagger$ for single/batch measurement, non-destructive sampling, and full 3-basis quantum state reconstruction. |
+| **Binary Outcome Syntax (`0` and `1`)** | All individual qubit measurement outcomes are strictly recorded as binary bits `0` and `1` (0 = positive eigenvector, 1 = negative eigenvector) with the collapsed eigenstate preserved in metadata. |
+| **Hierarchical Nested Classical Register** | Measurement outcomes are reverse time-ordered (latest operations at the top). Single-item measurements produce clean individual cards (no redundant batch rectangle); batch measurements nest individual bit/pair outcomes inside collapsible detail drawers. |
+| **Entangled Container Selection (EPR & GHZ)** | Entangled subsystems (EPR pairs and GHZ states) are grouped in visual containers. Clicking the container toggles selection of all qubits in the group, while clicking an individual qubit card toggles only that qubit. |
+| **Dropdown Sampling Bases** | `Sample Z-Basis` is standard; clicking `▼` reveals `Sample X-Basis`, `Sample Y-Basis`, and `Complete Tomography (Z, X, Y)`, displaying probabilities and histograms labelled by their respective eigenstates ($|0\rangle, |1\rangle$, $|+\rangle, |-\rangle$, $|+i\rangle, |-i\rangle$). |
+| **Unified Bell Measurement** | Automatically handles single pairs or batch pairs ($2, 4, 6\dots$ qubits) in a single click, recording nested $m_c$ and $m_t$ classical bits. |
+| **Sifted Key Extractor** | Local node tool converting matching raw measurement tokens (`0, 1, +, -`) into distilled key bitstrings. |
+| **Dynamic State Labels** | Applying gates updates the displayed state (e.g. $|0\rangle \xrightarrow{H} |+\rangle$; unknown states evolve as $H|\psi\rangle \to XH|\psi\rangle$). |
+| **EPR Reference Helper** | Instant reference modal mapping Bell states to standard 2-bit representations and creation circuits. |
+
+---
+
+## 🧪 Automated Testing
+
+Execute the end-to-end integration test suite:
 ```bash
 python test_simulator.py
 ```
-This tests Generic Teleportation with Tomography, Batch Encoding, Multi-Gate operations, Batch Transmission, Batch Measurements, and Joint Bell representations with 100% fidelity.
+
+The test suite validates:
+1. **Bell State Mapping**: $|\Phi^+\rangle \leftrightarrow 00$, $|\Phi^-\rangle \leftrightarrow 01$, $|\Psi^+\rangle \leftrightarrow 10$, $|\Psi^-\rangle \leftrightarrow 11$.
+2. **0-Indexed Conventions**: Visual and logical identifiers starting at Qubit #0.
+3. **Cluster Architecture**: 32-bit batch allocation without memory explosion.
+4. **Gate Evolution**: Dynamic state label transformations ($|0\rangle \to |+\rangle \to |-\rangle \to |1\rangle$, unknown state prefixing).
+5. **N-Qubit GHZ States**: Automatic generation and joint sampling.
+6. **Operator Privacy**: Alice's local quantum operations remain invisible in Bob's feed.
+7. **Batch Bell Measurement**: Combined bitstring records for multi-pair Bell measurements.
+8. **Sifted Key Extractor**: Correct distillation of sifted keys from raw tokens.
+9. **Bloch Sphere Generic States**: Polar angle $\theta$ and relative phase $\phi$ state preparation with theoretical tomography probabilities.
+10. **Y-Basis Measurement & Binary Syntax**: Circular basis measurement, strict `0` / `1` values, and collapsed eigenstate tracking.
+11. **Y-Basis Sampling & 3-Basis State Tomography**: Non-destructive sampling and complete state reconstruction across Z, X, and Y.
+12. **Single-Item Batch Suppression**: Eliminates redundant batch cards when measuring a single qubit or a single Bell pair.
+13. **Hierarchical Nesting & Time Ordering**: Nested bits in batch measurements, nested $m_c/m_t$ in Bell measurements, and strict chronological ordering in the Classical Register.

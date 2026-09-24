@@ -14,11 +14,14 @@
 </head>
 <body>
 
+  <!-- Floating Toast Notifications (Always visible on screen, no scroll needed) -->
+  <div id="toast-container" class="toast-container"></div>
+
   <!-- Top Navigation / Session Header -->
   <header class="app-header">
     <div class="header-left">
       <h1>⚛ Quantum Channel Simulator</h1>
-      <span class="subtitle">Multiplayer Quantum Protocol Sandbox (Teleportation, Superdense Coding, QKD BB84)</span>
+      <span class="subtitle">Multiplayer Quantum Protocol Sandbox (Teleportation, Superdense Coding, QKD BB84, QSDC)</span>
     </div>
     <div class="header-controls">
       <div class="control-group">
@@ -44,9 +47,6 @@
     <span class="qubits-summary">Global Active Qubits in Room: <strong id="active-qubits-count">0</strong></span>
   </div>
 
-  <!-- Notification Banner -->
-  <div id="error-banner" class="error-banner" style="display: none;"></div>
-
   <!-- Main Multi-Column Workspace -->
   <main class="main-layout">
 
@@ -63,12 +63,8 @@
           </div>
         </div>
 
-        <div class="selection-pill" id="selection-pill">
-          <span>No qubits selected</span>
-        </div>
-
         <p class="panel-desc">
-          Click cards to multi-select for batch operations. Use <strong>[Set Control]</strong> & <strong>[Set Target]</strong> on cards for CNOT & Bell measurements.
+          Click qubits or entangled containers to select in sequence (0, 1, 2...). First selected qubit (0) serves as Control for 2-qubit operations, followed by Target(s).
         </p>
 
         <div id="qubits-container" class="qubits-grid">
@@ -76,16 +72,54 @@
         </div>
       </div>
 
-      <!-- Action Center Tabs -->
+      <!-- Action Center -->
       <div class="panel actions-panel">
         <div class="panel-header">
           <h2>⚡ Quantum Operations Console</h2>
         </div>
 
-        <!-- 1. State Preparation -->
+        <!-- 0. Dynamic Sampling Box (Appears ONLY when >= 1 qubit is selected) -->
+        <div id="sampling-action-box" class="action-section sampling-section" style="display: none;">
+          <div class="section-title-row">
+            <h3>📊 Quantum State Sampling / State Tomography</h3>
+            <span class="badge-prob">Multi-Qubit Joint Sampling</span>
+          </div>
+          <p class="section-desc">Sample the joint quantum state non-destructively in Z, X, or Y basis (eigenvalues processed as binary bits 0 and 1).</p>
+          
+          <div class="btn-row">
+            <div class="sample-dropdown-container">
+              <div class="sample-btn-group">
+                <button id="btn-sample-z" class="btn btn-action">📊 Sample Z-Basis (0/1)</button>
+                <button id="btn-toggle-sample-menu" class="btn btn-action btn-dropdown-toggle" title="More Sampling Bases">▼</button>
+              </div>
+              <div id="sample-basis-menu" class="sample-dropdown-menu" style="display: none;">
+                <button id="btn-sample-x" class="dropdown-item">📊 Sample X-Basis (0/1)</button>
+                <button id="btn-sample-y" class="dropdown-item">📊 Sample Y-Basis (0/1)</button>
+                <button id="btn-sample-tomo" class="dropdown-item" style="border-top: 1px solid #e2e8f0; color: #7e22ce;">🌐 Complete Tomography (Z, X, Y)</button>
+              </div>
+            </div>
+            <div class="control-group" style="margin-left: auto;">
+              <label for="sample-shots">Shots:</label>
+              <select id="sample-shots" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+                <option value="500">500</option>
+                <option value="1000" selected>1000</option>
+                <option value="2000">2000</option>
+                <option value="5000">5000</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. State Preparation with Quantity -->
         <div class="action-section">
-          <h3>1. State Preparation</h3>
-          <p class="section-desc">Instantly prepare pure basis states, entangled Bell pairs, or a generic real state.</p>
+          <div class="section-title-row">
+            <h3>1. State Preparation</h3>
+            <div class="qty-selector">
+              <label for="prep-count">Quantity:</label>
+              <input type="number" id="prep-count" value="1" min="1" max="100" style="width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1;">
+            </div>
+          </div>
+          <p class="section-desc">Prepare single basis states, entangled Bell pairs, or n-qubit GHZ states. Supports batch quantity.</p>
           
           <div class="btn-row">
             <span class="btn-subgroup-title">Basis States:</span>
@@ -97,47 +131,119 @@
 
           <div class="btn-row" style="margin-top: 8px;">
             <span class="btn-subgroup-title">Bell Pairs (EPR):</span>
-            <button class="btn btn-bell" data-prep="phi+" title="|Φ+⟩ ↔ 10 (or 00 in Superdense)">|Φ+⟩</button>
-            <button class="btn btn-bell" data-prep="phi-" title="|Φ-⟩ ↔ 11 (or 10 in Superdense)">|Φ-⟩</button>
-            <button class="btn btn-bell" data-prep="psi+" title="|Ψ+⟩ ↔ 00 (or 01 in Superdense)">|Ψ+⟩</button>
-            <button class="btn btn-bell" data-prep="psi-" title="|Ψ-⟩ ↔ 01 (or 11 in Superdense)">|Ψ-⟩</button>
+            <button class="btn btn-bell" data-prep="phi+" title="Bell State |Φ+⟩">|Φ+⟩</button>
+            <button class="btn btn-bell" data-prep="phi-" title="Bell State |Φ-⟩">|Φ-⟩</button>
+            <button class="btn btn-bell" data-prep="psi+" title="Bell State |Ψ+⟩">|Ψ+⟩</button>
+            <button class="btn btn-bell" data-prep="psi-" title="Bell State |Ψ-⟩">|Ψ-⟩</button>
+            <button id="btn-epr-helper-top" class="btn btn-small" title="View Bell State & EPR Reference">ℹ EPR Helper</button>
           </div>
 
-          <!-- Generic State Builder with Slider -->
+          <!-- Collapsible EPR Helper Box -->
+          <div id="epr-helper-modal" class="epr-helper-box" style="display: none; margin-top: 8px;">
+            <div class="epr-helper-inner">
+              <div class="epr-helper-header">
+                <strong>📖 Standard EPR State ↔ Two-Bit String Reference Legend</strong>
+                <button id="btn-close-epr-helper" class="btn btn-small">✕</button>
+              </div>
+              <table class="ref-table">
+                <thead>
+                  <tr>
+                    <th>Bell State</th>
+                    <th>Wavefunction</th>
+                    <th>Associated 2-Bit String</th>
+                    <th>Generation Circuit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>|Φ+⟩</strong></td>
+                    <td>( |00⟩ + |11⟩ ) / √2</td>
+                    <td><span class="badge-bit">00</span></td>
+                    <td>H on qubit 0, CNOT(0→1)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Φ-⟩</strong></td>
+                    <td>( |00⟩ - |11⟩ ) / √2</td>
+                    <td><span class="badge-bit">01</span></td>
+                    <td>H & Z on qubit 0, CNOT(0→1)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Ψ+⟩</strong></td>
+                    <td>( |01⟩ + |10⟩ ) / √2</td>
+                    <td><span class="badge-bit">10</span></td>
+                    <td>H on qubit 0, CNOT(0→1), X on qubit 1</td>
+                  </tr>
+                  <tr>
+                    <td><strong>|Ψ-⟩</strong></td>
+                    <td>( |01⟩ - |10⟩ ) / √2</td>
+                    <td><span class="badge-bit">11</span></td>
+                    <td>H & Z on qubit 0, CNOT(0→1), X on qubit 1</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- GHZ State Generation Row -->
+          <div class="ghz-prep-row" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="btn-subgroup-title">GHZ State:</span>
+            <label for="ghz-n-input" style="font-size: 0.8rem; font-weight: 600; color: #475569;">Qubits (N ≥ 3):</label>
+            <input type="number" id="ghz-n-input" value="3" min="3" max="16" style="width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1;">
+            <button id="btn-prepare-ghz" class="btn btn-prep" style="background: #fdf2f8; color: #be185d; border-color: #f472b6;">Prepare |GHZ_N⟩</button>
+          </div>
+
+          <!-- Generic State Builder with θ and φ Sliders (State Tomography Enabled) -->
           <div class="generic-state-builder">
             <div class="generic-header">
-              <strong>Generic State: |ψ⟩ = α|0⟩ + β|1⟩</strong>
-              <span id="prob-rule-check" class="badge-prob">α² + β² = 1.000</span>
+              <strong>Generic State: |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)sin(θ/2)|1⟩</strong>
+              <span id="prob-rule-check" class="badge-prob">Full Bloch Sphere</span>
             </div>
             
             <div class="slider-row">
-              <label for="theta-slider">Angle θ (0°–180°):</label>
-              <input type="range" id="theta-slider" min="0" max="180" value="73.74" step="0.5">
-              <span id="theta-display">73.7°</span>
-              <button id="btn-toggle-sign" class="btn btn-small" title="Toggle sign of β">β Sign: (+)</button>
+              <label for="theta-slider" style="min-width: 130px;">Polar Angle θ (0°–180°):</label>
+              <input type="range" id="theta-slider" min="0" max="180" value="60" step="0.5">
+              <span id="theta-display" style="min-width: 50px; font-weight: 600;">60.0°</span>
+            </div>
+
+            <div class="slider-row">
+              <label for="phi-slider" style="min-width: 130px;">Phase Angle φ (0°–360°):</label>
+              <input type="range" id="phi-slider" min="0" max="360" value="45" step="1">
+              <span id="phi-display" style="min-width: 50px; font-weight: 600;">45.0°</span>
             </div>
 
             <div class="state-math-display">
-              <span class="formula" id="generic-formula">|ψ⟩ = 0.800|0⟩ + 0.600|1⟩</span>
-              <span class="probs" id="generic-probs">P(0) = 64.0% | P(1) = 36.0%</span>
+              <span class="formula" id="generic-formula">|ψ⟩ = 0.866|0⟩ + (0.354 + 0.354i)|1⟩</span>
+              <div class="probs-box" style="display: flex; flex-direction: column; gap: 2px;">
+                <span class="probs" id="generic-probs" style="font-weight: 600; color: #0f172a;">P_Z(0)=75.0% | P_X(0)=80.6% | P_Y(0)=80.6%</span>
+                <span class="probs" id="generic-bloch" style="color: #64748b; font-size: 0.75rem;">Bloch Vector: ⟨X⟩=+0.612, ⟨Y⟩=+0.612, ⟨Z⟩=+0.500</span>
+              </div>
               <button id="btn-prepare-generic" class="btn btn-primary" style="margin-left: auto;">Prepare Generic State |ψ⟩</button>
             </div>
           </div>
         </div>
 
-        <!-- 2. Quantum Gates (Single & Batch) -->
+        <!-- 2. Quantum Gates (Multi-Qubit, CNOT, Pauli String) -->
         <div class="action-section">
           <h3>2. Quantum Gates</h3>
-          <p class="section-desc">Single-qubit gates apply to <strong>ALL selected qubits</strong> and auto-deselect after application. CNOT follows Control-Target rule.</p>
+          <p class="section-desc">Single-qubit gates apply to all selected qubits and auto-deselect. CNOT applies qubit 0 (Control) to all remaining (Targets).</p>
           <div class="btn-row">
             <button id="btn-gate-x" class="btn btn-gate" disabled>Pauli-X (NOT)</button>
             <button id="btn-gate-z" class="btn btn-gate" disabled>Pauli-Z (Phase Flip)</button>
+            <button id="btn-gate-y" class="btn btn-gate" disabled>Pauli-Y</button>
             <button id="btn-gate-h" class="btn btn-gate" disabled>Hadamard (H)</button>
-            <button id="btn-gate-cnot" class="btn btn-gate-2q" disabled>CNOT (Control → Target)</button>
+            <button id="btn-gate-cnot" class="btn btn-gate-2q" disabled>CNOT (0 → 1..N)</button>
           </div>
+
+          <!-- Pauli String Application -->
+          <div class="pauli-string-row" style="margin-top: 10px;">
+            <label for="pauli-string-input">Pauli String:</label>
+            <input type="text" id="pauli-string-input" placeholder="e.g. X Z I Y (matches # of selected qubits)" style="flex: 1;">
+            <button id="btn-apply-pauli-string" class="btn btn-gate-2q" disabled>Apply Pauli String</button>
+          </div>
+          <div class="inline-error" id="err-pauli" style="display: none;"></div>
         </div>
 
-        <!-- 3. Quantum Transmission (Single & Batch) -->
+        <!-- 3. Quantum Transmission (Batch Send) -->
         <div class="action-section">
           <h3>3. Quantum Channel Transmission</h3>
           <p class="section-desc">Transmit all selected qubits to another node simultaneously. Recipient receives <em>Unknown Qubit |ψ⟩</em>.</p>
@@ -150,45 +256,65 @@
           </div>
         </div>
 
-        <!-- 4. Measurement Console -->
+        <!-- 4. Measurement Console (Single, Batch, Unified Bell) -->
         <div class="action-section">
-          <h3>4. Measurement (Single & Batch Collapse)</h3>
-          <p class="section-desc">Measures all selected qubits. Diagonal basis outcomes display strictly <strong>+</strong> or <strong>-</strong>.</p>
+          <h3>4. Measurement (Batch Collapse & Nested Classical Records)</h3>
+          <p class="section-desc">Measures selected qubits. Outcomes are processed as binary bits [0/1]. Individual bits are nested within batch records.</p>
           <div class="btn-row">
-            <button id="btn-measure-z" class="btn btn-measure" disabled>Measure Selected in Z [0/1]</button>
-            <button id="btn-measure-x" class="btn btn-measure" disabled>Measure Selected in X [+/-]</button>
-            <button id="btn-measure-bell" class="btn btn-measure-bell" disabled>Bell Basis (Control + Target)</button>
+            <button id="btn-measure-z" class="btn btn-measure" disabled>Measure All in Z [0/1]</button>
+            <button id="btn-measure-x" class="btn btn-measure" disabled>Measure All in X [0/1]</button>
+            <button id="btn-measure-y" class="btn btn-measure" disabled>Measure All in Y [0/1]</button>
+            <button id="btn-measure-bell-unified" class="btn btn-measure" disabled>Bell Basis Measurement</button>
           </div>
 
           <!-- Custom Basis Sequence Measurement -->
           <div class="custom-measure-row" style="margin-top: 10px;">
-            <label for="batch-measure-bases">Custom Bases:</label>
-            <input type="text" id="batch-measure-bases" placeholder="e.g. Z X X Z X" style="flex: 1;">
+            <label for="batch-measure-bases">Custom Bases (Z, X, Y):</label>
+            <input type="text" id="batch-measure-bases" placeholder="e.g. Z X Y Z X" style="flex: 1;">
             <button id="btn-measure-custom" class="btn btn-measure" disabled>Measure with Sequence</button>
           </div>
+          <div class="inline-error" id="err-custom-measure" style="display: none;"></div>
         </div>
 
-        <!-- 5. Automated Qubit Encoder (Batch QKD Pipeline) -->
+        <!-- 5. Automated Pipelines (BB84 & Superdense EPR) -->
         <div class="action-section">
-          <h3>5. Automated Qubit Encoding Pipeline</h3>
-          <p class="section-desc">Automatize qubit sequence generation: Bit Sequence + Basis Sequence = Encoded Qubit Sequence.</p>
-          <div class="pipeline-inputs">
-            <div class="input-field">
-              <label for="pipeline-bits">Bit Sequence (0s & 1s):</label>
-              <input type="text" id="pipeline-bits" placeholder="e.g. 0 1 1 0 1 0" value="0 1 1 0 1 0">
+          <h3>5. Automated Pipelines</h3>
+          
+          <!-- Pipeline A: BB84 Qubit Encoder -->
+          <div class="pipeline-block">
+            <h4>📡 BB84 Qubit Encoder (Bits + Bases = Qubits)</h4>
+            <div class="pipeline-inputs">
+              <div class="input-field">
+                <label for="pipeline-bits">Bit Sequence (0s & 1s):</label>
+                <input type="text" id="pipeline-bits" placeholder="e.g. 0 1 1 0 1 0" value="0 1 1 0 1 0">
+              </div>
+              <div class="input-field">
+                <label for="pipeline-bases">Basis Sequence (Z & X):</label>
+                <input type="text" id="pipeline-bases" placeholder="e.g. Z X X Z X Z" value="Z X X Z X Z">
+              </div>
+              <button id="btn-batch-encode" class="btn btn-primary">Encode Qubits</button>
             </div>
-            <div class="input-field">
-              <label for="pipeline-bases">Basis Sequence (Z & X):</label>
-              <input type="text" id="pipeline-bases" placeholder="e.g. Z X X Z X Z" value="Z X X Z X Z">
+            <div class="inline-error" id="err-pipeline" style="display: none;"></div>
+          </div>
+
+          <!-- Pipeline B: Superdense Coding EPR Encoder -->
+          <div class="pipeline-block" style="margin-top: 12px;">
+            <h4>🔗 Superdense EPR Encoder (2-Bit Stream ➔ Bell Pairs)</h4>
+            <p class="section-desc">Encodes bit pairs into EPR states: 00 ➔ |Φ+⟩, 01 ➔ |Φ-⟩, 10 ➔ |Ψ+⟩, 11 ➔ |Ψ-⟩.</p>
+            <div class="pipeline-inputs">
+              <div class="input-field" style="flex: 2;">
+                <label for="epr-bits-input">Bitstream (even # of bits):</label>
+                <input type="text" id="epr-bits-input" placeholder="e.g. 00 01 10 11" value="00 01 10 11">
+              </div>
+              <button id="btn-batch-encode-epr" class="btn btn-primary">Encode into EPR Pairs</button>
             </div>
-            <button id="btn-batch-encode" class="btn btn-primary">Encode & Prepare Qubits</button>
+            <div class="inline-error" id="err-epr" style="display: none;"></div>
           </div>
         </div>
 
-        <!-- 6. Local Node Tools (QKD Helpers) -->
+        <!-- 6. Local Node Tools (QKD Helpers & Key Extractor) -->
         <div class="action-section">
           <h3>6. Local Tools for Any Node</h3>
-          <p class="section-desc">Independent offline tools for basis comparison, sifted key generation, and random sequences.</p>
 
           <!-- Basis Comparer -->
           <div class="tool-subcard">
@@ -198,7 +324,27 @@
               <input type="text" id="comp-bases-b" placeholder="Basis Sequence 2 (e.g. Bob: Z Z X X X Z)">
               <button id="btn-compare-bases" class="btn btn-action">Compare Bases</button>
             </div>
+            <div class="inline-error" id="err-comp-bases" style="display: none;"></div>
             <div id="compare-results" class="tool-results" style="display: none;"></div>
+          </div>
+
+          <!-- Sifted Key Extractor Tool -->
+          <div class="tool-subcard" style="margin-top: 10px;">
+            <h4>🔑 Sifted Key Extractor Tool</h4>
+            <p class="section-desc">Distills raw measurement outcomes into the final secret key bitstring by filtering through matching basis indices (supports binary 0/1 and diagonal +/-).</p>
+            <div class="tool-row">
+              <div class="input-field" style="flex: 1;">
+                <label for="sifted-indices-input">Sifted Matching Indices:</label>
+                <input type="text" id="sifted-indices-input" placeholder="e.g. 0, 1, 3, 5 or 0 1 3 5">
+              </div>
+              <div class="input-field" style="flex: 1;">
+                <label for="raw-outcomes-input">Raw Measurement Outcomes:</label>
+                <input type="text" id="raw-outcomes-input" placeholder="e.g. 0 1 1 0 0 1 or 0 + 1 - 0 +">
+              </div>
+              <button id="btn-extract-key" class="btn btn-primary" style="align-self: flex-end;">Extract Secret Key</button>
+            </div>
+            <div class="inline-error" id="err-sifted-extract" style="display: none;"></div>
+            <div id="sifted-key-results" class="tool-results" style="display: none;"></div>
           </div>
 
           <!-- Random Sequence Generator -->
@@ -208,70 +354,25 @@
               <label for="rand-bits-count">Length (N):</label>
               <input type="number" id="rand-bits-count" value="8" min="1" max="64" style="width: 70px;">
               <button id="btn-generate-random" class="btn btn-action">Generate Random</button>
-              <button id="btn-load-encoder" class="btn btn-small" style="display: none;">Load to Encoder</button>
-              <button id="btn-load-measure" class="btn btn-small" style="display: none;">Load to Multi-Measure</button>
+              <button id="btn-load-encoder" class="btn btn-small" style="display: none;">Load to BB84 Encoder</button>
+              <button id="btn-load-measure" class="btn btn-small" style="display: none;">Load to Measure</button>
             </div>
             <div id="random-results" class="tool-results" style="display: none;"></div>
-          </div>
-
-          <!-- EPR & Bell States Reference Table -->
-          <div class="tool-subcard" style="margin-top: 10px;">
-            <div class="toggle-header" id="btn-toggle-epr-table">
-              <h4>📖 EPR State ↔ Two-Bit String Reference Legend ▼</h4>
-            </div>
-            <div id="epr-reference-table" class="reference-table-container">
-              <table class="ref-table">
-                <thead>
-                  <tr>
-                    <th>Bell State</th>
-                    <th>Wavefunction</th>
-                    <th>Lecture / Protocol Encoding</th>
-                    <th>Superdense Coding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>|Ψ+⟩</strong></td>
-                    <td>( |01⟩ + |10⟩ ) / √2</td>
-                    <td><span class="badge-bit">00</span></td>
-                    <td><span class="badge-bit alt">01</span> (X gate)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Ψ-⟩</strong></td>
-                    <td>( |01⟩ - |10⟩ ) / √2</td>
-                    <td><span class="badge-bit">01</span></td>
-                    <td><span class="badge-bit alt">11</span> (ZX gate)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Φ+⟩</strong></td>
-                    <td>( |00⟩ + |11⟩ ) / √2</td>
-                    <td><span class="badge-bit">10</span></td>
-                    <td><span class="badge-bit alt">00</span> (Identity I)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Φ-⟩</strong></td>
-                    <td>( |00⟩ - |11⟩ ) / √2</td>
-                    <td><span class="badge-bit">11</span></td>
-                    <td><span class="badge-bit alt">10</span> (Z gate)</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </div>
 
         </div>
       </div>
 
-      <!-- Collapsed Classical Bits & Joint Bell Outcomes -->
+      <!-- Collapsed Classical Bits, Joint Bell Outcomes & Batch Bitstrings (Time-Ordered & Nested) -->
       <div class="panel classical-register-panel">
         <div class="panel-header">
-          <h2>💾 Classical Register (Collapsed Bits & Joint Bell Outcomes)</h2>
+          <h2>💾 Classical Register (Time-Ordered & Nested Outcomes)</h2>
           <button id="btn-clear-bits" class="btn btn-small">Clear Register</button>
         </div>
-        <p class="panel-desc">Measurement outcomes collapsed into classical bits. Share results in the Classical Channel to complete protocols!</p>
+        <p class="panel-desc">Time-ordered sequence of measurement records. Individual bit outcomes and joint Bell pairs are nested inside their respective measurement operations.</p>
         
         <div id="classical-bits-container" class="bits-grid">
-          <div class="empty-state">No measured bits yet.</div>
+          <div class="empty-state">No measured records yet.</div>
         </div>
       </div>
 
@@ -281,18 +382,18 @@
     <!-- RIGHT COLUMN: Communication Channels & Interactive Tomography -->
     <section class="comms-column">
 
-      <!-- Sampling & Tomography Modal / Card -->
+      <!-- Sampling & Tomography Histogram Panel -->
       <div id="tomography-panel" class="panel tomography-panel" style="display: none;">
         <div class="panel-header">
-          <h2>📊 Quantum State Tomography (Histogram)</h2>
+          <h2>📊 Quantum State Histogram (Joint Sampling)</h2>
           <button id="btn-close-tomography" class="btn btn-small">✕</button>
         </div>
-        <p class="panel-desc" id="tomography-desc">Simulated sampling of received state to estimate |α|² and |β|².</p>
+        <p class="panel-desc" id="tomography-desc">Statistical distribution from non-destructive sampling.</p>
         
         <div id="histogram-container" class="histogram-container"></div>
         
         <div class="tomo-actions">
-          <button id="btn-share-histogram" class="btn btn-primary btn-small">Share Reconstructed State in Chat</button>
+          <button id="btn-share-histogram" class="btn btn-primary btn-small">Share Histogram in Chat</button>
         </div>
       </div>
 
@@ -300,7 +401,10 @@
       <div class="panel chat-panel">
         <div class="panel-header">
           <h2>📞 Classical Channel (Public Broadcast)</h2>
-          <span class="badge-channel classical">Classical Channel</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button id="btn-clear-chat" class="btn btn-small" title="Clear chat messages">Clear Chat</button>
+            <span class="badge-channel classical">Classical Channel</span>
+          </div>
         </div>
         <p class="panel-desc">Required for sharing measurement bases in QKD, protocol confirmation, and teleportation correction bits.</p>
 
@@ -312,13 +416,16 @@
         </form>
       </div>
 
-      <!-- Quantum Channel Activity Log -->
+      <!-- Quantum Channel Activity Log (Private to Operator) -->
       <div class="panel activity-panel">
         <div class="panel-header">
-          <h2>⚛ Quantum Channel Activity Feed</h2>
-          <span class="badge-channel quantum">Quantum Channel</span>
+          <h2>⚛ Quantum Operations Feed</h2>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button id="btn-clear-logs" class="btn btn-small" title="Clear quantum feed">Clear Feed</button>
+            <span class="badge-channel quantum">Private Log</span>
+          </div>
         </div>
-        <p class="panel-desc">Real-time log of state preparation, gate evolution, quantum particle transfers, and measurement collapses.</p>
+        <p class="panel-desc">Private log of your local state preparations, gate transformations, transmissions, sampling probabilities, and measurement collapses.</p>
 
         <div id="quantum-logs" class="logs-container"></div>
       </div>
