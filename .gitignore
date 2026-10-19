@@ -1,0 +1,19 @@
+# Ignored folders
+docs/
+interface/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments & environment variables
+.env
+.venv
+env/
+venv/
+
+# Operating system files
+.DS_Store
+Thumbs.db

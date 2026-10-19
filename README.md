@@ -144,3 +144,5 @@ The test suite validates:
 11. **Y-Basis Sampling & 3-Basis State Tomography**: Non-destructive sampling and complete state reconstruction across Z, X, and Y.
 12. **Single-Item Batch Suppression**: Eliminates redundant batch cards when measuring a single qubit or a single Bell pair.
 13. **Hierarchical Nesting & Time Ordering**: Nested bits in batch measurements, nested $m_c/m_t$ in Bell measurements, and strict chronological ordering in the Classical Register.
+14. **D.E. Entanglement Distributor & Room Security**: Multi-node Bell ($N=2$) and GHZ ($N \ge 3$) distribution, real-time room capacity, password validation, and duplicate handle protection.
+

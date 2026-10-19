@@ -398,6 +398,71 @@ def test_full_quantum_simulator():
 
     print("✔ Reverse time order (latest at top) and hierarchical nesting in classical records verified!")
 
+    # 14. Testing D.E. Entanglement Distributor & Room Directory Security
+    print("\n--- 14. Testing D.E. Entanglement Distributor & Room Directory Security ---")
+    alice.get_received()
+    bob.get_received()
+
+    # D.E. with 2 participants (Alice & Bob) -> Bell pair |Φ+⟩
+    alice.emit("distribute_entanglement", {"recipient_sids": [alice_sid, bob_sid]})
+    alice_inv = get_latest_inventory(alice)
+    bob_inv = get_latest_inventory(bob)
+
+    alice_de_q = [q for q in alice_inv["active_qubits"] if q.get("pair_type") == "|Φ+⟩"]
+    bob_de_q = [q for q in bob_inv["active_qubits"] if q.get("pair_type") == "|Φ+⟩"]
+    assert len(alice_de_q) >= 1, "Alice did not receive D.E. Bell qubit"
+    assert len(bob_de_q) >= 1, "Bob did not receive D.E. Bell qubit"
+    assert alice_de_q[-1]["pair_id"] == bob_de_q[-1]["pair_id"], "D.E. pair IDs do not match"
+    print("✔ D.E. 2-node distribution (|Φ+⟩ Bell pair) verified!")
+
+    # Connect Charlie for 3-node GHZ test & verify no previous history is leaked on join
+    charlie = server.socketio.test_client(server.app)
+    charlie.emit("join_room", {"username": "Charlie", "room": "physics-lab"})
+    charlie_join_evts = charlie.get_received()
+    charlie_chat_hist = [e["args"][0] for e in charlie_join_evts if e["name"] == "chat_history"]
+    charlie_log_hist = [e["args"][0] for e in charlie_join_evts if e["name"] == "quantum_logs_history"]
+    assert charlie_chat_hist == [[]], f"Expected empty chat_history for new entrant, got {charlie_chat_hist}"
+    assert charlie_log_hist == [[]], f"Expected empty quantum_logs_history for new entrant, got {charlie_log_hist}"
+    print("✔ New entrant privacy verified: Charlie received zero previous system messages or prior operation logs!")
+
+    charlie_sid = get_peer_sid(alice, "Charlie")
+    assert charlie_sid, "Charlie SID not resolved"
+
+    # D.E. with 3 participants (Alice, Bob, Charlie) -> GHZ_3
+    alice.emit("distribute_entanglement", {"recipient_sids": [alice_sid, bob_sid, charlie_sid]})
+    alice_inv = get_latest_inventory(alice)
+    bob_inv = get_latest_inventory(bob)
+    charlie_inv = get_latest_inventory(charlie)
+
+    alice_ghz = [q for q in alice_inv["active_qubits"] if q.get("pair_type") == "|GHZ_3⟩"]
+    bob_ghz = [q for q in bob_inv["active_qubits"] if q.get("pair_type") == "|GHZ_3⟩"]
+    charlie_ghz = [q for q in charlie_inv["active_qubits"] if q.get("pair_type") == "|GHZ_3⟩"]
+    assert len(alice_ghz) >= 1 and len(bob_ghz) >= 1 and len(charlie_ghz) >= 1
+    assert alice_ghz[-1]["pair_id"] == bob_ghz[-1]["pair_id"] == charlie_ghz[-1]["pair_id"]
+    print("✔ D.E. 3-node distribution (|GHZ_3⟩ state) verified!")
+
+    # Test Duplicate Handle Validation
+    intruder = server.socketio.test_client(server.app)
+    intruder.emit("join_room", {"username": "Alice", "room": "physics-lab"})
+    err_events = [ev for ev in intruder.get_received() if ev["name"] == "action_error"]
+    assert "already in use" in err_events[0]["args"][0]["message"].lower() or "já está em uso" in err_events[0]["args"][0]["message"].lower()
+    print("✔ Duplicate handle security check verified!")
+
+    # Test Available Rooms Query
+    alice.emit("get_available_rooms")
+    avail_events = [ev for ev in alice.get_received() if ev["name"] == "available_rooms"]
+    assert len(avail_events) > 0
+    room_names = [r["name"] for r in avail_events[0]["args"][0]]
+    assert "quantum-lab" in room_names or "physics-lab" in room_names
+    print(f"✔ Room Directory listing verified! Rooms: {room_names}")
+
+    # Test Empty Room Auto-Pruning
+    charlie.disconnect()
+    bob.disconnect()
+    alice.disconnect()
+    assert "physics-lab" not in server.rooms, "Empty room was not pruned on disconnect"
+    print("✔ Empty room auto-pruned upon all participants disconnecting!")
+
     print("\n=======================================================")
     print("🎉 ALL SIMULATOR INTEGRATION & PROTOCOL TESTS PASSED! 🎉")
     print("=======================================================")

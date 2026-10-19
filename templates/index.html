@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quantum Channel Simulator</title>
+  <meta name="theme-color" content="#080710">
+  <title>Quantum ComSim</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/socket.io.min.js"></script>
   <script>
@@ -13,427 +14,620 @@
   </script>
 </head>
 <body>
-
-  <!-- Floating Toast Notifications (Always visible on screen, no scroll needed) -->
   <div id="toast-container" class="toast-container"></div>
+  <div class="aurora aurora-one"></div>
+  <div class="aurora aurora-two"></div>
 
-  <!-- Top Navigation / Session Header -->
-  <header class="app-header">
+  <!-- Top Header Navigation -->
+  <header class="clean-header">
     <div class="header-left">
-      <h1>⚛ Quantum Channel Simulator</h1>
-      <span class="subtitle">Multiplayer Quantum Protocol Sandbox (Teleportation, Superdense Coding, QKD BB84, QSDC)</span>
+      <a class="brand" href="#"><span class="atom">🌐</span><span>Quantum ComSim</span></a>
     </div>
-    <div class="header-controls">
-      <div class="control-group">
-        <label for="room-input">Room:</label>
-        <input type="text" id="room-input" value="quantum-lab" placeholder="Room ID">
-      </div>
-      <div class="control-group">
-        <label for="user-input">Handle:</label>
-        <input type="text" id="user-input" value="Alice" placeholder="Node Name">
-      </div>
-      <button id="btn-join" class="btn btn-primary">Join Room</button>
-      <button id="btn-reset-room" class="btn btn-danger" title="Clear room quantum state">Reset Room</button>
-      <div id="connection-status" class="status-badge disconnected">Disconnected</div>
+
+    <!-- Session Badge & Active Status (Eliminating the separate Hello banner) -->
+    <div class="session-pill" id="session-pill">
+      <i class="status-dot" id="status-dot"></i>
+      <span>
+        <small data-i18n="room_label_title">ROOM</small>
+        <b id="room-label">None</b>
+      </span>
+      <span class="session-divider"></span>
+      <span>
+        <small data-i18n="handle_label_title">HANDLE</small>
+        <b id="handle-label">Guest</b>
+      </span>
+      <span class="session-divider"></span>
+      <span id="connection-status-box">
+        <small data-i18n="status_label_title">STATUS</small>
+        <b id="connection-status-text">Disconnected</b>
+      </span>
+    </div>
+
+    <div class="header-actions">
+      <!-- Language Switcher EN / PT -->
+      <button class="lang-toggle" id="lang-toggle" title="Switch Language / Alternar Idioma">
+        <span>🌐</span> <b id="lang-text">EN</b>
+      </button>
+      <button class="icon-control" id="theme-toggle" title="Toggle Theme">
+        <span id="theme-icon">☼</span>
+      </button>
+      <button class="room-button" id="open-room">
+        <span data-i18n="rooms_btn">ROOMS</span>
+      </button>
     </div>
   </header>
 
-  <!-- Peers Bar -->
-  <div class="peers-bar">
-    <span class="peers-label">🌐 Connected Nodes:</span>
-    <div id="peers-list" class="peers-list">
-      <em>None</em>
-    </div>
-    <span class="qubits-summary">Global Active Qubits in Room: <strong id="active-qubits-count">0</strong></span>
-  </div>
+  <!-- Main Shell (Locked until a room is joined) -->
+  <main class="clean-shell is-locked" id="main-workspace">
+    <div class="workspace-layout">
 
-  <!-- Main Multi-Column Workspace -->
-  <main class="main-layout">
-
-    <!-- LEFT COLUMN: Quantum Laboratory & Inventory -->
-    <section class="quantum-lab-column">
-
-      <!-- Active Qubit Inventory -->
-      <div class="panel inventory-panel">
-        <div class="panel-header">
-          <h2>📦 Quantum Inventory (Your Qubits)</h2>
-          <div class="inventory-top-actions">
-            <button id="btn-select-all" class="btn btn-small">Select All</button>
-            <button id="btn-clear-selection" class="btn btn-small">Deselect All</button>
-          </div>
-        </div>
-
-        <p class="panel-desc">
-          Click qubits or entangled containers to select in sequence (0, 1, 2...). First selected qubit (0) serves as Control for 2-qubit operations, followed by Target(s).
-        </p>
-
-        <div id="qubits-container" class="qubits-grid">
-          <div class="empty-state">No qubits in your inventory. Prepare one below!</div>
-        </div>
-      </div>
-
-      <!-- Action Center -->
-      <div class="panel actions-panel">
-        <div class="panel-header">
-          <h2>⚡ Quantum Operations Console</h2>
-        </div>
-
-        <!-- 0. Dynamic Sampling Box (Appears ONLY when >= 1 qubit is selected) -->
-        <div id="sampling-action-box" class="action-section sampling-section" style="display: none;">
-          <div class="section-title-row">
-            <h3>📊 Quantum State Sampling / State Tomography</h3>
-            <span class="badge-prob">Multi-Qubit Joint Sampling</span>
-          </div>
-          <p class="section-desc">Sample the joint quantum state non-destructively in Z, X, or Y basis (eigenvalues processed as binary bits 0 and 1).</p>
+      <!-- Permanent Thin Lateral Operations Ribbon -->
+      <aside class="quantum-ribbon" id="quantum-ribbon">
+        
+        <!-- Group 1: Preparation & Entanglement (Visible when NO qubits are selected) -->
+        <div class="ribbon-group" id="ribbon-prep-group">
           
-          <div class="btn-row">
-            <div class="sample-dropdown-container">
-              <div class="sample-btn-group">
-                <button id="btn-sample-z" class="btn btn-action">📊 Sample Z-Basis (0/1)</button>
-                <button id="btn-toggle-sample-menu" class="btn btn-action btn-dropdown-toggle" title="More Sampling Bases">▼</button>
+          <!-- D.E. (Entanglement Distributor) -->
+          <button class="ribbon-btn ribbon-btn-glow" id="btn-ribbon-de" data-popover-target="popover-de" title="Entanglement Distributor (D.E.)">
+            <span class="ribbon-icon">🌐</span>
+            <span class="ribbon-text">D.E.</span>
+          </button>
+
+          <div class="ribbon-divider"></div>
+
+          <!-- |0⟩ Direct Create / Hover for |1⟩ & Quantity -->
+          <div class="ribbon-hover-wrapper">
+            <button class="ribbon-btn" id="btn-ribbon-zero" data-quick-state="0" title="Prepare |0⟩ (Hover for |1⟩ & Qty)">
+              <span class="ribbon-text">|0⟩</span>
+            </button>
+            <div class="ribbon-flyout" id="flyout-zero">
+              <span class="flyout-title" data-i18n="basis_comp_title_short">Computational</span>
+              <div class="flyout-options">
+                <button type="button" class="flyout-choice-btn active" data-flyout-state="0">|0⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="1">|1⟩</button>
               </div>
-              <div id="sample-basis-menu" class="sample-dropdown-menu" style="display: none;">
-                <button id="btn-sample-x" class="dropdown-item">📊 Sample X-Basis (0/1)</button>
-                <button id="btn-sample-y" class="dropdown-item">📊 Sample Y-Basis (0/1)</button>
-                <button id="btn-sample-tomo" class="dropdown-item" style="border-top: 1px solid #e2e8f0; color: #7e22ce;">🌐 Complete Tomography (Z, X, Y)</button>
+              <div class="flyout-qty-row">
+                <span data-i18n="qty_label">Qty:</span>
+                <input type="number" min="1" max="50" value="1" class="flyout-qty-input">
               </div>
-            </div>
-            <div class="control-group" style="margin-left: auto;">
-              <label for="sample-shots">Shots:</label>
-              <select id="sample-shots" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
-                <option value="500">500</option>
-                <option value="1000" selected>1000</option>
-                <option value="2000">2000</option>
-                <option value="5000">5000</option>
-              </select>
+              <button type="button" class="flyout-action-btn" data-i18n="btn_create">CREATE</button>
             </div>
           </div>
+
+          <!-- |+⟩ Direct Create / Hover for |−⟩ & Quantity -->
+          <div class="ribbon-hover-wrapper">
+            <button class="ribbon-btn" id="btn-ribbon-plus" data-quick-state="+" title="Prepare |+⟩ (Hover for |−⟩ & Qty)">
+              <span class="ribbon-text">|+⟩</span>
+            </button>
+            <div class="ribbon-flyout" id="flyout-plus">
+              <span class="flyout-title" data-i18n="basis_diag_title_short">Diagonal</span>
+              <div class="flyout-options">
+                <button type="button" class="flyout-choice-btn active" data-flyout-state="+">|+⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="-">|−⟩</button>
+              </div>
+              <div class="flyout-qty-row">
+                <span data-i18n="qty_label">Qty:</span>
+                <input type="number" min="1" max="50" value="1" class="flyout-qty-input">
+              </div>
+              <button type="button" class="flyout-action-btn" data-i18n="btn_create">CREATE</button>
+            </div>
+          </div>
+
+          <!-- |+i⟩ Direct Create / Hover for |−i⟩ & Quantity -->
+          <div class="ribbon-hover-wrapper">
+            <button class="ribbon-btn" id="btn-ribbon-plus-i" data-quick-state="+i" title="Prepare |+i⟩ (Hover for |−i⟩ & Qty)">
+              <span class="ribbon-text">|+i⟩</span>
+            </button>
+            <div class="ribbon-flyout" id="flyout-plus-i">
+              <span class="flyout-title" data-i18n="basis_circ_title_short">Circular</span>
+              <div class="flyout-options">
+                <button type="button" class="flyout-choice-btn active" data-flyout-state="+i">|+i⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="-i">|−i⟩</button>
+              </div>
+              <div class="flyout-qty-row">
+                <span data-i18n="qty_label">Qty:</span>
+                <input type="number" min="1" max="50" value="1" class="flyout-qty-input">
+              </div>
+              <button type="button" class="flyout-action-btn" data-i18n="btn_create">CREATE</button>
+            </div>
+          </div>
+
+          <!-- |Φ+⟩ Direct Create / Hover for |Φ-⟩, |Ψ+⟩, |Ψ-⟩, Quantity & GHZ -->
+          <div class="ribbon-hover-wrapper">
+            <button class="ribbon-btn" id="btn-ribbon-bell" data-quick-bell="phi+" title="Prepare |Φ+⟩ (Hover for |Φ−⟩, |Ψ+⟩, |Ψ−⟩ & Qty)">
+              <span class="ribbon-text">|Φ⁺⟩</span>
+            </button>
+            <div class="ribbon-flyout" id="flyout-bell" style="width: 210px;">
+              <span class="flyout-title" data-i18n="bell_pairs_label">Bell Pairs (EPR)</span>
+              <div class="flyout-options" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+                <button type="button" class="flyout-choice-btn active" data-flyout-state="phi+">|Φ⁺⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="phi-">|Φ⁻⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="psi+">|Ψ⁺⟩</button>
+                <button type="button" class="flyout-choice-btn" data-flyout-state="psi-">|Ψ⁻⟩</button>
+              </div>
+              <div class="flyout-qty-row">
+                <span data-i18n="qty_label">Qty:</span>
+                <input type="number" min="1" max="25" value="1" class="flyout-qty-input" id="flyout-bell-qty">
+              </div>
+              <button type="button" class="flyout-action-btn" id="btn-flyout-bell-create" data-i18n="btn_create">CREATE</button>
+              <div class="flyout-divider" style="margin: 8px 0; border-top: 1px solid rgba(255,255,255,0.08);"></div>
+              <span class="flyout-title" data-i18n="ghz_label">GHZ State (N ≥ 3)</span>
+              <div class="flyout-qty-row">
+                <span>N:</span>
+                <input type="number" min="3" max="16" value="3" class="flyout-qty-input" id="flyout-ghz-size">
+              </div>
+              <button type="button" class="flyout-action-btn" id="btn-flyout-ghz-create" data-i18n="btn_prep_ghz">PREPARE GHZ</button>
+            </div>
+          </div>
+
+          <!-- |ψ⟩ Generic State (Bloch Sphere) Popover -->
+          <button class="ribbon-btn" id="btn-ribbon-generic" data-popover-target="popover-generic" title="Generic State (Bloch Sphere)">
+            <span class="ribbon-text">|ψ⟩</span>
+          </button>
+
+          <!-- Utils / Protocols Popover -->
+          <button class="ribbon-btn" id="btn-ribbon-protocols" data-popover-target="popover-protocols" title="Protocols & Utilities">
+            <span class="ribbon-text">Utils</span>
+          </button>
+
         </div>
 
-        <!-- 1. State Preparation with Quantity -->
-        <div class="action-section">
-          <div class="section-title-row">
-            <h3>1. State Preparation</h3>
-            <div class="qty-selector">
-              <label for="prep-count">Quantity:</label>
-              <input type="number" id="prep-count" value="1" min="1" max="100" style="width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1;">
-            </div>
-          </div>
-          <p class="section-desc">Prepare single basis states, entangled Bell pairs, or n-qubit GHZ states. Supports batch quantity.</p>
+        <!-- Group 2: Gates & Measurement (Visible when QUBITS ARE SELECTED) -->
+        <div class="ribbon-group" id="ribbon-gates-group" style="display: none;">
           
-          <div class="btn-row">
-            <span class="btn-subgroup-title">Basis States:</span>
-            <button class="btn btn-prep" data-prep="0">|0⟩</button>
-            <button class="btn btn-prep" data-prep="1">|1⟩</button>
-            <button class="btn btn-prep" data-prep="+">|+⟩</button>
-            <button class="btn btn-prep" data-prep="-">|-⟩</button>
+          <div class="ribbon-selection-badge" id="ribbon-selection-badge" title="Click to deselect">
+            <span id="ribbon-sel-count">0</span>
+            <small>&times;</small>
           </div>
 
-          <div class="btn-row" style="margin-top: 8px;">
-            <span class="btn-subgroup-title">Bell Pairs (EPR):</span>
-            <button class="btn btn-bell" data-prep="phi+" title="Bell State |Φ+⟩">|Φ+⟩</button>
-            <button class="btn btn-bell" data-prep="phi-" title="Bell State |Φ-⟩">|Φ-⟩</button>
-            <button class="btn btn-bell" data-prep="psi+" title="Bell State |Ψ+⟩">|Ψ+⟩</button>
-            <button class="btn btn-bell" data-prep="psi-" title="Bell State |Ψ-⟩">|Ψ-⟩</button>
-            <button id="btn-epr-helper-top" class="btn btn-small" title="View Bell State & EPR Reference">ℹ EPR Helper</button>
-          </div>
+          <div class="ribbon-section-label">Gates</div>
 
-          <!-- Collapsible EPR Helper Box -->
-          <div id="epr-helper-modal" class="epr-helper-box" style="display: none; margin-top: 8px;">
-            <div class="epr-helper-inner">
-              <div class="epr-helper-header">
-                <strong>📖 Standard EPR State ↔ Two-Bit String Reference Legend</strong>
-                <button id="btn-close-epr-helper" class="btn btn-small">✕</button>
-              </div>
-              <table class="ref-table">
-                <thead>
-                  <tr>
-                    <th>Bell State</th>
-                    <th>Wavefunction</th>
-                    <th>Associated 2-Bit String</th>
-                    <th>Generation Circuit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>|Φ+⟩</strong></td>
-                    <td>( |00⟩ + |11⟩ ) / √2</td>
-                    <td><span class="badge-bit">00</span></td>
-                    <td>H on qubit 0, CNOT(0→1)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Φ-⟩</strong></td>
-                    <td>( |00⟩ - |11⟩ ) / √2</td>
-                    <td><span class="badge-bit">01</span></td>
-                    <td>H & Z on qubit 0, CNOT(0→1)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Ψ+⟩</strong></td>
-                    <td>( |01⟩ + |10⟩ ) / √2</td>
-                    <td><span class="badge-bit">10</span></td>
-                    <td>H on qubit 0, CNOT(0→1), X on qubit 1</td>
-                  </tr>
-                  <tr>
-                    <td><strong>|Ψ-⟩</strong></td>
-                    <td>( |01⟩ - |10⟩ ) / √2</td>
-                    <td><span class="badge-bit">11</span></td>
-                    <td>H & Z on qubit 0, CNOT(0→1), X on qubit 1</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <button class="ribbon-btn gate-btn" data-gate="X" title="Pauli-X (Bit Flip)"><b>X</b></button>
+          <button class="ribbon-btn gate-btn" data-gate="Y" title="Pauli-Y (Bit & Phase Flip)"><b>Y</b></button>
+          <button class="ribbon-btn gate-btn" data-gate="Z" title="Pauli-Z (Phase Flip)"><b>Z</b></button>
+          <button class="ribbon-btn gate-btn" data-gate="H" title="Hadamard (Superposition)"><b>H</b></button>
+          <button class="ribbon-btn gate-btn" data-gate="CX" id="btn-ribbon-cnot" title="CNOT Gate (Control 0 → Targets 1..N)"><b>⊕</b></button>
+          
+          <!-- Pauli String Popover -->
+          <button class="ribbon-btn" id="btn-ribbon-pauli" data-popover-target="popover-pauli" title="Pauli String">
+            <span class="ribbon-text">“XZ”</span>
+          </button>
 
-          <!-- GHZ State Generation Row -->
-          <div class="ghz-prep-row" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span class="btn-subgroup-title">GHZ State:</span>
-            <label for="ghz-n-input" style="font-size: 0.8rem; font-weight: 600; color: #475569;">Qubits (N ≥ 3):</label>
-            <input type="number" id="ghz-n-input" value="3" min="3" max="16" style="width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1;">
-            <button id="btn-prepare-ghz" class="btn btn-prep" style="background: #fdf2f8; color: #be185d; border-color: #f472b6;">Prepare |GHZ_N⟩</button>
-          </div>
+          <div class="ribbon-divider"></div>
+          <div class="ribbon-section-label">Meas.</div>
 
-          <!-- Generic State Builder with θ and φ Sliders (State Tomography Enabled) -->
-          <div class="generic-state-builder">
-            <div class="generic-header">
-              <strong>Generic State: |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)sin(θ/2)|1⟩</strong>
-              <span id="prob-rule-check" class="badge-prob">Full Bloch Sphere</span>
-            </div>
-            
-            <div class="slider-row">
-              <label for="theta-slider" style="min-width: 130px;">Polar Angle θ (0°–180°):</label>
-              <input type="range" id="theta-slider" min="0" max="180" value="60" step="0.5">
-              <span id="theta-display" style="min-width: 50px; font-weight: 600;">60.0°</span>
-            </div>
+          <button class="ribbon-btn meas-btn" data-measure="Z" title="Measure in Z-basis">⟨Z⟩</button>
+          <button class="ribbon-btn meas-btn" data-measure="X" title="Measure in X-basis">⟨X⟩</button>
+          <button class="ribbon-btn meas-btn" data-measure="Y" title="Measure in Y-basis">⟨Y⟩</button>
+          <button class="ribbon-btn meas-btn" data-measure="BELL" id="btn-ribbon-bell-meas" title="Measure in Bell basis">⟨B⟩</button>
+          
+          <!-- Custom Sequence Popover -->
+          <button class="ribbon-btn" id="btn-ribbon-custom-seq" data-popover-target="popover-custom-seq" title="Custom Measurement Sequence">
+            <span class="ribbon-text">⟨XZ⟩</span>
+          </button>
 
-            <div class="slider-row">
-              <label for="phi-slider" style="min-width: 130px;">Phase Angle φ (0°–360°):</label>
-              <input type="range" id="phi-slider" min="0" max="360" value="45" step="1">
-              <span id="phi-display" style="min-width: 50px; font-weight: 600;">45.0°</span>
-            </div>
+          <!-- Sampling / Histogram Popover -->
+          <button class="ribbon-btn" id="btn-ribbon-sample" data-popover-target="popover-sample" title="Sampling & State Tomography">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ribbon-svg-icon">
+              <rect x="3" y="12" width="4" height="8" rx="1"></rect>
+              <rect x="10" y="5" width="4" height="15" rx="1"></rect>
+              <rect x="17" y="9" width="4" height="11" rx="1"></rect>
+            </svg>
+          </button>
 
-            <div class="state-math-display">
-              <span class="formula" id="generic-formula">|ψ⟩ = 0.866|0⟩ + (0.354 + 0.354i)|1⟩</span>
-              <div class="probs-box" style="display: flex; flex-direction: column; gap: 2px;">
-                <span class="probs" id="generic-probs" style="font-weight: 600; color: #0f172a;">P_Z(0)=75.0% | P_X(0)=80.6% | P_Y(0)=80.6%</span>
-                <span class="probs" id="generic-bloch" style="color: #64748b; font-size: 0.75rem;">Bloch Vector: ⟨X⟩=+0.612, ⟨Y⟩=+0.612, ⟨Z⟩=+0.500</span>
-              </div>
-              <button id="btn-prepare-generic" class="btn btn-primary" style="margin-left: auto;">Prepare Generic State |ψ⟩</button>
-            </div>
-          </div>
         </div>
 
-        <!-- 2. Quantum Gates (Multi-Qubit, CNOT, Pauli String) -->
-        <div class="action-section">
-          <h3>2. Quantum Gates</h3>
-          <p class="section-desc">Single-qubit gates apply to all selected qubits and auto-deselect. CNOT applies qubit 0 (Control) to all remaining (Targets).</p>
-          <div class="btn-row">
-            <button id="btn-gate-x" class="btn btn-gate" disabled>Pauli-X (NOT)</button>
-            <button id="btn-gate-z" class="btn btn-gate" disabled>Pauli-Z (Phase Flip)</button>
-            <button id="btn-gate-y" class="btn btn-gate" disabled>Pauli-Y</button>
-            <button id="btn-gate-h" class="btn btn-gate" disabled>Hadamard (H)</button>
-            <button id="btn-gate-cnot" class="btn btn-gate-2q" disabled>CNOT (0 → 1..N)</button>
+      </aside>
+
+      <!-- 4-Quadrant Focus Grid -->
+      <section class="primary-grid">
+
+        <!-- QUANTUM INVENTORY -->
+        <article class="focus-panel qubit-workspace">
+          <header class="focus-header">
+            <div>
+              <span data-i18n="panel_qubits">QUANTUM INVENTORY</span>
+              <h2><span data-i18n="your_qubits">Your Qubits</span> <b id="qubit-count">0</b></h2>
+            </div>
+            <div class="compact-actions">
+              <button id="select-all" data-i18n="select_all">SELECT ALL</button>
+              <button id="clear-selection" data-i18n="deselect">DESELECT</button>
+            </div>
+          </header>
+          <p class="microcopy" data-i18n="selection_microcopy">
+            Select in sequence: first qubit is control (0) and subsequent are targets (1, 2...).
+          </p>
+          <div class="qubit-stage" id="qubit-list">
+            <div class="beautiful-empty">
+              <div class="empty-orbit"><i></i></div>
+              <strong data-i18n="empty_inventory_title">Your inventory is empty</strong>
+              <span data-i18n="empty_inventory_desc">Use the lateral Operations ribbon to prepare your first quantum state.</span>
+              <button data-open-tools type="button" data-i18n="btn_prep_first">PREPARE QUBIT</button>
+            </div>
+          </div>
+          <footer class="selection-footer">
+            <span data-i18n="current_selection">CURRENT SELECTION</span>
+            <code id="selection-readout" data-i18n="no_qubits_selected">no qubits selected</code>
+          </footer>
+        </article>
+
+        <!-- CLASSICAL CHANNEL (CHAT) -->
+        <article class="focus-panel chat-workspace">
+          <header class="focus-header">
+            <div>
+              <span data-i18n="panel_chat">CLASSICAL CHANNEL</span>
+              <h2 data-i18n="chat_title">Room Chat</h2>
+            </div>
+            <div class="compact-actions" style="display: flex; align-items: center; gap: 10px;">
+              <div class="channel-status" id="chat-status-indicator">
+                <i></i> <span id="chat-status-text">PUBLIC</span>
+              </div>
+              <button class="text-action" id="clear-chat" data-i18n="btn_clear">CLEAR</button>
+            </div>
+          </header>
+
+          <!-- Filter bar: All messages vs Private messages filter -->
+          <div class="chat-filter-bar">
+            <button class="chat-filter-btn active" id="chat-filter-all" data-filter="all" data-i18n="chat_filter_all">ALL</button>
+            <button class="chat-filter-btn" id="chat-filter-private" data-filter="private" data-i18n="chat_filter_private">PRIVATE</button>
+            <span class="chat-filter-hint" data-i18n="chat_filter_hint">Feed view</span>
           </div>
 
-          <!-- Pauli String Application -->
-          <div class="pauli-string-row" style="margin-top: 10px;">
-            <label for="pauli-string-input">Pauli String:</label>
-            <input type="text" id="pauli-string-input" placeholder="e.g. X Z I Y (matches # of selected qubits)" style="flex: 1;">
-            <button id="btn-apply-pauli-string" class="btn btn-gate-2q" disabled>Apply Pauli String</button>
+          <div class="clean-messages" id="messages">
+            <div class="chat-empty">
+              <span data-i18n="chat_empty">No messages in this room.</span>
+            </div>
           </div>
-          <div class="inline-error" id="err-pauli" style="display: none;"></div>
-        </div>
 
-        <!-- 3. Quantum Transmission (Batch Send) -->
-        <div class="action-section">
-          <h3>3. Quantum Channel Transmission</h3>
-          <p class="section-desc">Transmit all selected qubits to another node simultaneously. Recipient receives <em>Unknown Qubit |ψ⟩</em>.</p>
-          <div class="transmit-row">
-            <label for="recipient-select">Send to:</label>
-            <select id="recipient-select" disabled>
-              <option value="">-- Select Recipient Node --</option>
+          <form class="clean-message-box" id="chat-form">
+            <select class="chat-recipient-select" id="chat-recipient-select" title="Message Recipient">
+              <option value="" data-i18n="chat_dest_public">To: Room (Public)</option>
             </select>
-            <button id="btn-send-qubit" class="btn btn-action" disabled>Transmit Selected via Quantum Channel ✈</button>
-          </div>
-        </div>
+            <input id="chat-input" data-i18n-placeholder="chat_placeholder" placeholder="Type a classical message..." autocomplete="off">
+            <button id="send-message" type="submit" data-i18n="btn_send">SEND</button>
+          </form>
+        </article>
 
-        <!-- 4. Measurement Console (Single, Batch, Unified Bell) -->
-        <div class="action-section">
-          <h3>4. Measurement (Batch Collapse & Nested Classical Records)</h3>
-          <p class="section-desc">Measures selected qubits. Outcomes are processed as binary bits [0/1]. Individual bits are nested within batch records.</p>
-          <div class="btn-row">
-            <button id="btn-measure-z" class="btn btn-measure" disabled>Measure All in Z [0/1]</button>
-            <button id="btn-measure-x" class="btn btn-measure" disabled>Measure All in X [0/1]</button>
-            <button id="btn-measure-y" class="btn btn-measure" disabled>Measure All in Y [0/1]</button>
-            <button id="btn-measure-bell-unified" class="btn btn-measure" disabled>Bell Basis Measurement</button>
-          </div>
-
-          <!-- Custom Basis Sequence Measurement -->
-          <div class="custom-measure-row" style="margin-top: 10px;">
-            <label for="batch-measure-bases">Custom Bases (Z, X, Y):</label>
-            <input type="text" id="batch-measure-bases" placeholder="e.g. Z X Y Z X" style="flex: 1;">
-            <button id="btn-measure-custom" class="btn btn-measure" disabled>Measure with Sequence</button>
-          </div>
-          <div class="inline-error" id="err-custom-measure" style="display: none;"></div>
-        </div>
-
-        <!-- 5. Automated Pipelines (BB84 & Superdense EPR) -->
-        <div class="action-section">
-          <h3>5. Automated Pipelines</h3>
-          
-          <!-- Pipeline A: BB84 Qubit Encoder -->
-          <div class="pipeline-block">
-            <h4>📡 BB84 Qubit Encoder (Bits + Bases = Qubits)</h4>
-            <div class="pipeline-inputs">
-              <div class="input-field">
-                <label for="pipeline-bits">Bit Sequence (0s & 1s):</label>
-                <input type="text" id="pipeline-bits" placeholder="e.g. 0 1 1 0 1 0" value="0 1 1 0 1 0">
-              </div>
-              <div class="input-field">
-                <label for="pipeline-bases">Basis Sequence (Z & X):</label>
-                <input type="text" id="pipeline-bases" placeholder="e.g. Z X X Z X Z" value="Z X X Z X Z">
-              </div>
-              <button id="btn-batch-encode" class="btn btn-primary">Encode Qubits</button>
+        <!-- CLASSICAL REGISTER (BITS INVENTORY) -->
+        <article class="focus-panel bits-workspace">
+          <header class="focus-header">
+            <div>
+              <span data-i18n="panel_bits">CLASSICAL REGISTER</span>
+              <h2><span data-i18n="bits_title">Bit Inventory</span> <b id="bit-count">0</b></h2>
             </div>
-            <div class="inline-error" id="err-pipeline" style="display: none;"></div>
+            <button class="text-action" id="clear-bits" data-i18n="btn_clear">CLEAR</button>
+          </header>
+          <div class="bits-stage" id="bits-list">
+            <div class="inline-empty" data-i18n="no_measurements">No measurements recorded yet.</div>
           </div>
+        </article>
 
-          <!-- Pipeline B: Superdense Coding EPR Encoder -->
-          <div class="pipeline-block" style="margin-top: 12px;">
-            <h4>🔗 Superdense EPR Encoder (2-Bit Stream ➔ Bell Pairs)</h4>
-            <p class="section-desc">Encodes bit pairs into EPR states: 00 ➔ |Φ+⟩, 01 ➔ |Φ-⟩, 10 ➔ |Ψ+⟩, 11 ➔ |Ψ-⟩.</p>
-            <div class="pipeline-inputs">
-              <div class="input-field" style="flex: 2;">
-                <label for="epr-bits-input">Bitstream (even # of bits):</label>
-                <input type="text" id="epr-bits-input" placeholder="e.g. 00 01 10 11" value="00 01 10 11">
-              </div>
-              <button id="btn-batch-encode-epr" class="btn btn-primary">Encode into EPR Pairs</button>
+        <!-- QUANTUM CHANNEL TRANSMITTER -->
+        <article class="focus-panel transmitter-workspace">
+          <header class="focus-header">
+            <div>
+              <span data-i18n="panel_transmitter">QUANTUM CHANNEL</span>
+              <h2 data-i18n="transmitter_title">Qubit Transmitter</h2>
             </div>
-            <div class="inline-error" id="err-epr" style="display: none;"></div>
-          </div>
-        </div>
-
-        <!-- 6. Local Node Tools (QKD Helpers & Key Extractor) -->
-        <div class="action-section">
-          <h3>6. Local Tools for Any Node</h3>
-
-          <!-- Basis Comparer -->
-          <div class="tool-subcard">
-            <h4>🔍 Basis Comparison Tool</h4>
-            <div class="tool-row">
-              <input type="text" id="comp-bases-a" placeholder="Basis Sequence 1 (e.g. Alice: Z X X Z X Z)">
-              <input type="text" id="comp-bases-b" placeholder="Basis Sequence 2 (e.g. Bob: Z Z X X X Z)">
-              <button id="btn-compare-bases" class="btn btn-action">Compare Bases</button>
+            <div class="compact-actions">
+              <button id="btn-channel-log" class="text-action" data-i18n="btn_log" title="Operator's Private Log">LOG</button>
             </div>
-            <div class="inline-error" id="err-comp-bases" style="display: none;"></div>
-            <div id="compare-results" class="tool-results" style="display: none;"></div>
-          </div>
-
-          <!-- Sifted Key Extractor Tool -->
-          <div class="tool-subcard" style="margin-top: 10px;">
-            <h4>🔑 Sifted Key Extractor Tool</h4>
-            <p class="section-desc">Distills raw measurement outcomes into the final secret key bitstring by filtering through matching basis indices (supports binary 0/1 and diagonal +/-).</p>
-            <div class="tool-row">
-              <div class="input-field" style="flex: 1;">
-                <label for="sifted-indices-input">Sifted Matching Indices:</label>
-                <input type="text" id="sifted-indices-input" placeholder="e.g. 0, 1, 3, 5 or 0 1 3 5">
-              </div>
-              <div class="input-field" style="flex: 1;">
-                <label for="raw-outcomes-input">Raw Measurement Outcomes:</label>
-                <input type="text" id="raw-outcomes-input" placeholder="e.g. 0 1 1 0 0 1 or 0 + 1 - 0 +">
-              </div>
-              <button id="btn-extract-key" class="btn btn-primary" style="align-self: flex-end;">Extract Secret Key</button>
+          </header>
+          <div class="transmission-route">
+            <div class="node active">
+              <i>A</i>
+              <span>
+                <small data-i18n="origin_label">ORIGIN</small>
+                <b id="source-node">You</b>
+              </span>
             </div>
-            <div class="inline-error" id="err-sifted-extract" style="display: none;"></div>
-            <div id="sifted-key-results" class="tool-results" style="display: none;"></div>
-          </div>
-
-          <!-- Random Sequence Generator -->
-          <div class="tool-subcard" style="margin-top: 10px;">
-            <h4>🎲 Random Bit & Basis Generator</h4>
-            <div class="tool-row">
-              <label for="rand-bits-count">Length (N):</label>
-              <input type="number" id="rand-bits-count" value="8" min="1" max="64" style="width: 70px;">
-              <button id="btn-generate-random" class="btn btn-action">Generate Random</button>
-              <button id="btn-load-encoder" class="btn btn-small" style="display: none;">Load to BB84 Encoder</button>
-              <button id="btn-load-measure" class="btn btn-small" style="display: none;">Load to Measure</button>
+            <div class="quantum-line">
+              <i></i><span>QUANTUM LINK</span>
             </div>
-            <div id="random-results" class="tool-results" style="display: none;"></div>
+            <div class="node">
+              <i>B</i>
+              <span>
+                <small data-i18n="dest_label">DESTINATION</small>
+                <select id="recipient" title="Select Destination Node">
+                  <option value="" data-i18n="select_node">-- Select Recipient Node --</option>
+                </select>
+              </span>
+            </div>
           </div>
-
-        </div>
-      </div>
-
-      <!-- Collapsed Classical Bits, Joint Bell Outcomes & Batch Bitstrings (Time-Ordered & Nested) -->
-      <div class="panel classical-register-panel">
-        <div class="panel-header">
-          <h2>💾 Classical Register (Time-Ordered & Nested Outcomes)</h2>
-          <button id="btn-clear-bits" class="btn btn-small">Clear Register</button>
-        </div>
-        <p class="panel-desc">Time-ordered sequence of measurement records. Individual bit outcomes and joint Bell pairs are nested inside their respective measurement operations.</p>
-        
-        <div id="classical-bits-container" class="bits-grid">
-          <div class="empty-state">No measured records yet.</div>
-        </div>
-      </div>
-
-    </section>
-
-
-    <!-- RIGHT COLUMN: Communication Channels & Interactive Tomography -->
-    <section class="comms-column">
-
-      <!-- Sampling & Tomography Histogram Panel -->
-      <div id="tomography-panel" class="panel tomography-panel" style="display: none;">
-        <div class="panel-header">
-          <h2>📊 Quantum State Histogram (Joint Sampling)</h2>
-          <button id="btn-close-tomography" class="btn btn-small">✕</button>
-        </div>
-        <p class="panel-desc" id="tomography-desc">Statistical distribution from non-destructive sampling.</p>
-        
-        <div id="histogram-container" class="histogram-container"></div>
-        
-        <div class="tomo-actions">
-          <button id="btn-share-histogram" class="btn btn-primary btn-small">Share Histogram in Chat</button>
-        </div>
-      </div>
-
-      <!-- Classical Channel (Chat) -->
-      <div class="panel chat-panel">
-        <div class="panel-header">
-          <h2>📞 Classical Channel (Public Broadcast)</h2>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <button id="btn-clear-chat" class="btn btn-small" title="Clear chat messages">Clear Chat</button>
-            <span class="badge-channel classical">Classical Channel</span>
+          <div class="transmit-summary">
+            <span data-i18n="selected_qubits_summary">SELECTED QUBITS</span>
+            <b id="transmit-count">0</b>
           </div>
-        </div>
-        <p class="panel-desc">Required for sharing measurement bases in QKD, protocol confirmation, and teleportation correction bits.</p>
+          <button class="transmit-button" id="transmit" disabled data-i18n="btn_transmit">
+            TRANSMIT QUBIT(S) <span>→</span>
+          </button>
+        </article>
 
-        <div id="chat-messages" class="messages-container"></div>
-
-        <form id="chat-form" class="chat-input-row">
-          <input type="text" id="chat-input" placeholder="Broadcast a classical message..." autocomplete="off">
-          <button type="submit" class="btn btn-primary">Send</button>
-        </form>
-      </div>
-
-      <!-- Quantum Channel Activity Log (Private to Operator) -->
-      <div class="panel activity-panel">
-        <div class="panel-header">
-          <h2>⚛ Quantum Operations Feed</h2>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <button id="btn-clear-logs" class="btn btn-small" title="Clear quantum feed">Clear Feed</button>
-            <span class="badge-channel quantum">Private Log</span>
-          </div>
-        </div>
-        <p class="panel-desc">Private log of your local state preparations, gate transformations, transmissions, sampling probabilities, and measurement collapses.</p>
-
-        <div id="quantum-logs" class="logs-container"></div>
-      </div>
-
-    </section>
-
+      </section>
+    </div>
   </main>
 
+  <!-- Floating Popovers Container (Placed outside .clean-shell so stacking context is root body) -->
+  <div class="ribbon-popovers" id="ribbon-popovers">
+    
+    <!-- 1. D.E. POPOVER -->
+    <div class="ribbon-popover" id="popover-de">
+      <div class="popover-header">
+        <strong data-i18n="de_heading">Entanglement Distributor (D.E.)</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <p class="popover-desc" data-i18n="de_select_nodes">Select room participants to receive entangled qubits:</p>
+      <div class="participant-list" id="participant-list">
+        <div class="inline-empty" data-i18n="waiting_peers">Waiting for other peers to connect...</div>
+      </div>
+      <div class="distribution-summary">
+        <span data-i18n="de_summary_2">2 participants → Bell Pair |Φ+⟩</span>
+        <small data-i18n="de_summary_3">3+ participants → GHZ N</small>
+      </div>
+      <button class="drawer-primary" id="distribute-entanglement" data-i18n="btn_distribute">CREATE & DISTRIBUTE</button>
+    </div>
+
+    <!-- 2. BELL & GHZ POPOVER -->
+    <div class="ribbon-popover" id="popover-bell-ghz">
+      <div class="popover-header">
+        <strong data-i18n="bell_pairs_label">Bell Pairs & GHZ States</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <label class="drawer-field">
+        <span data-i18n="quantity_label">QUANTITY</span>
+        <input id="quantity" type="number" min="1" max="50" value="1">
+      </label>
+      <div class="tool-label" data-i18n="bell_pairs_label">BELL PAIRS (EPR)</div>
+      <div class="choice-grid four">
+        <button data-prepare="phi+">Φ+</button>
+        <button data-prepare="phi-">Φ−</button>
+        <button data-prepare="psi+">Ψ+</button>
+        <button data-prepare="psi-">Ψ−</button>
+      </div>
+      <details class="drawer-details">
+        <summary>
+          <span data-i18n="epr_reference_title">EPR / BELL STATES REFERENCE</span>
+          <span>+</span>
+        </summary>
+        <div class="epr-reference">
+          <div><b>|Φ+⟩</b><code>(|00⟩ + |11⟩) / √2</code><span>00</span></div>
+          <div><b>|Φ−⟩</b><code>(|00⟩ − |11⟩) / √2</code><span>01</span></div>
+          <div><b>|Ψ+⟩</b><code>(|01⟩ + |10⟩) / √2</code><span>10</span></div>
+          <div><b>|Ψ−⟩</b><code>(|01⟩ − |10⟩) / √2</code><span>11</span></div>
+        </div>
+      </details>
+      <div class="tool-label" style="margin-top:12px;" data-i18n="ghz_label">GHZ STATE (N ≥ 3)</div>
+      <div class="inline-form">
+        <input id="ghz-size" type="number" min="3" max="16" value="3">
+        <button id="prepare-ghz" data-i18n="btn_prep_ghz">PREPARE GHZ</button>
+      </div>
+    </div>
+
+    <!-- 3. GENERIC STATE POPOVER -->
+    <div class="ribbon-popover" id="popover-generic">
+      <div class="popover-header">
+        <strong data-i18n="generic_label">Generic State · Bloch Sphere</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <div class="range-field">
+        <label>
+          <span data-i18n="polar_angle">POLAR ANGLE θ</span>
+          <code id="theta-value">60.0°</code>
+        </label>
+        <input id="theta" type="range" min="0" max="180" value="60" step="0.5">
+      </div>
+      <div class="range-field pink">
+        <label>
+          <span data-i18n="phase_angle">PHASE φ</span>
+          <code id="phase-value">45.0°</code>
+        </label>
+        <input id="phase" type="range" min="0" max="360" value="45" step="1">
+      </div>
+      <div class="state-equation" id="state-equation"></div>
+      <button class="drawer-primary" id="prepare-generic" data-i18n="btn_prep_generic">PREPARE STATE |ψ⟩</button>
+    </div>
+
+    <!-- 4. PROTOCOLS / UTILS POPOVER -->
+    <div class="ribbon-popover wide-popover" id="popover-protocols">
+      <div class="popover-header">
+        <strong data-i18n="protocols_heading">Protocol Utilities</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <div class="proto-tabs">
+        <button type="button" class="proto-tab-btn active" data-proto="bb84" data-i18n="proto_tab_encoder">Encoder</button>
+        <button type="button" class="proto-tab-btn" data-proto="compare" data-i18n="proto_tab_compare">Compare</button>
+        <button type="button" class="proto-tab-btn" data-proto="sift" data-i18n="proto_tab_sift">Key Extractor</button>
+        <button type="button" class="proto-tab-btn" data-proto="rng">RNG</button>
+      </div>
+
+      <div class="proto-panel active" id="proto-panel-bb84">
+        <h4 data-i18n="bb84_title">Qubit Encoder</h4>
+        <input id="bb84-bits" value="011010" placeholder="Bits (e.g. 011010)">
+        <input id="bb84-bases" value="ZXXZXZ" placeholder="Bases (e.g. ZXXZXZ)">
+        <button id="encode-bb84" data-i18n="btn_encode_bb84">ENCODE QUBITS</button>
+      </div>
+
+      <div class="proto-panel" id="proto-panel-compare">
+        <h4 data-i18n="basis_comp_title">Basis Comparison</h4>
+        <input id="bases-a" placeholder="Bases A: ZXXZXZ">
+        <input id="bases-b" placeholder="Bases B: ZZXXXZ">
+        <button id="compare-bases" data-i18n="btn_compare">COMPARE</button>
+      </div>
+
+      <div class="proto-panel" id="proto-panel-sift">
+        <h4 data-i18n="sifted_key_title">Sifted Key Extractor</h4>
+        <input id="key-indices" placeholder="Indices: 0, 2, 4, 5">
+        <input id="raw-bits" placeholder="Raw bits: 011001">
+        <button id="extract-key" data-i18n="btn_extract">EXTRACT KEY</button>
+      </div>
+
+      <div class="proto-panel" id="proto-panel-rng">
+        <h4 data-i18n="rng_title">Random Bit & Basis Generator</h4>
+        <div class="inline-form">
+          <input id="random-size" type="number" min="1" max="64" value="8">
+          <button id="generate-random" data-i18n="btn_generate">GENERATE</button>
+        </div>
+      </div>
+
+      <output class="tool-result" id="tool-result">Results will appear here.</output>
+    </div>
+
+    <!-- 5. PAULI STRING POPOVER -->
+    <div class="ribbon-popover" id="popover-pauli">
+      <div class="popover-header">
+        <strong data-i18n="pauli_string_label">Apply Pauli String</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <p class="drawer-hint" style="color:#a89eb6; font-size:12px; margin-bottom:8px;" data-i18n="pauli_hint">
+        String length must match number of selected qubits.
+      </p>
+      <div class="inline-form">
+        <input id="pauli-string" placeholder="e.g. XZIY">
+        <button id="apply-pauli" data-i18n="btn_apply">APPLY</button>
+      </div>
+    </div>
+
+    <!-- 6. CUSTOM SEQUENCE POPOVER -->
+    <div class="ribbon-popover" id="popover-custom-seq">
+      <div class="popover-header">
+        <strong data-i18n="custom_seq_label">Custom Basis Sequence</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <div class="inline-form">
+        <input id="basis-string" placeholder="e.g. ZXYZ">
+        <button id="measure-custom" data-i18n="btn_measure">MEASURE</button>
+      </div>
+      <button type="button" class="seq-random-btn" id="btn-random-bases-seq" data-i18n="btn_random_bases_seq">
+        GENERATE RANDOM BASES (Z/X)
+      </button>
+    </div>
+
+    <!-- 7. SAMPLING / TOMOGRAPHY POPOVER -->
+    <div class="ribbon-popover wide-popover" id="popover-sample">
+      <div class="popover-header">
+        <strong data-i18n="tomo_title">Sampling & State Tomography</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <p class="popover-desc" data-i18n="tomo_desc">Sample joint state non-destructively in Z, X, or Y basis.</p>
+      <label class="drawer-field">
+        <span>SHOTS</span>
+        <select id="sample-shots">
+          <option value="500">500</option>
+          <option value="1000" selected>1.000</option>
+          <option value="2000">2.000</option>
+          <option value="5000">5.000</option>
+        </select>
+      </label>
+      <div class="sampling-actions">
+        <button id="btn-sample-z" data-i18n="btn_sample_z">SAMPLE Z</button>
+        <button id="btn-sample-x" data-i18n="btn_sample_x">SAMPLE X</button>
+        <button id="btn-sample-y" data-i18n="btn_sample_y">SAMPLE Y</button>
+        <button id="btn-sample-tomo" data-i18n="btn_complete_tomo">COMPLETE TOMOGRAPHY</button>
+      </div>
+      <div id="tomography-results-container" class="tomography-results-container" style="display: none;">
+        <div class="tomography-results-header">
+          <strong id="tomography-title">Sampling Results</strong>
+          <button id="btn-close-tomography" title="Close">×</button>
+        </div>
+        <div id="tomography-body"></div>
+        <button class="hist-share-btn" id="btn-share-histogram" data-i18n="btn_share_chat">SHARE IN CHAT ↗</button>
+      </div>
+    </div>
+
+    <!-- 8. OPERATOR LOG MODAL POP-UP -->
+    <div class="log-modal-backdrop" id="log-modal-backdrop"></div>
+    <div class="ribbon-popover wide-popover" id="popover-log">
+      <div class="popover-header">
+        <strong data-i18n="log_heading">Quantum Operations Log</strong>
+        <button type="button" class="popover-close-btn" data-close-popover>×</button>
+      </div>
+      <div class="drawer-log" id="operation-log">
+        <div class="inline-empty" data-i18n="no_operations">No operations performed yet.</div>
+      </div>
+      <button class="text-action" id="clear-log" style="margin-top: 10px;" data-i18n="btn_clear_log">CLEAR LOG</button>
+    </div>
+
+  </div>
+
+  <!-- Initial Entrance / Room Directory Dialog (Gatekeeper) -->
+  <dialog class="room-dialog room-directory-dialog" id="room-dialog">
+    <form method="dialog" id="room-dialog-form">
+      <header>
+        <div>
+          <span>QUANTUM COMSIM · ROOM DIRECTORY</span>
+          <h2 data-i18n="room_directory_title">Quantum Rooms</h2>
+          <p data-i18n="room_directory_desc">Create a lab or join an active room to begin.</p>
+        </div>
+        <button type="button" id="close-room-dialog" value="cancel" title="Close">×</button>
+      </header>
+
+      <div class="dialog-error-banner" id="room-dialog-error" style="display: none;"></div>
+
+      <div class="room-dialog-tabs">
+        <button type="button" class="active" data-room-tab="available" data-i18n="tab_available_rooms">AVAILABLE ROOMS</button>
+        <button type="button" data-room-tab="create" data-i18n="tab_create_room">CREATE ROOM</button>
+      </div>
+
+      <!-- Tab: Available Rooms -->
+      <section class="room-tab-view active" id="room-tab-available">
+        <label>
+          <span data-i18n="search_room">SEARCH ROOM</span>
+          <input id="room-search" data-i18n-placeholder="search_room_placeholder" placeholder="Room name or ID...">
+        </label>
+        <div class="available-room-list" id="available-room-list">
+          <div class="inline-empty" data-i18n="no_rooms_available">No active rooms yet. Create the first one!</div>
+        </div>
+        <div class="join-identity">
+          <label>
+            <span data-i18n="your_handle">YOUR HANDLE</span>
+            <input id="handle-input" data-i18n-placeholder="handle_placeholder" placeholder="Choose a name">
+          </label>
+          <label>
+            <span data-i18n="room_password_label">ROOM PASSWORD</span>
+            <input id="join-password" type="password" data-i18n-placeholder="room_password_placeholder" placeholder="Only if protected">
+          </label>
+        </div>
+      </section>
+
+      <!-- Tab: Create Room -->
+      <section class="room-tab-view" id="room-tab-create">
+        <div class="create-room-intro">
+          <i>+</i>
+          <div>
+            <strong>New Laboratory</strong>
+            <span>Define room access rules and node capacity.</span>
+          </div>
+        </div>
+        <label>
+          <span data-i18n="create_room_name">ROOM NAME</span>
+          <input id="create-room-input" placeholder="e.g. teleportation-lab">
+        </label>
+        <label>
+          <span data-i18n="your_handle">YOUR HANDLE</span>
+          <input id="create-handle-input" data-i18n-placeholder="handle_placeholder" placeholder="Choose a name">
+        </label>
+        <div class="room-grid">
+          <label>
+            <span data-i18n="capacity_limit">CAPACITY LIMIT</span>
+            <input id="room-limit" type="number" min="2" max="32" value="8">
+          </label>
+          <label>
+            <span data-i18n="optional_password">PASSWORD (OPTIONAL)</span>
+            <input id="create-room-password" type="password" placeholder="Empty for public room">
+          </label>
+        </div>
+        <label class="room-checkbox">
+          <input type="checkbox" id="create-room-public" checked>
+          <span data-i18n="public_directory_check">Show in public directory</span>
+        </label>
+        <button class="drawer-primary" id="btn-create-room-submit" type="button" data-i18n="btn_create_submit">
+          CREATE & ENTER ROOM
+        </button>
+      </section>
+    </form>
+  </dialog>
+
+  <!-- Client Application Controller -->
   <script src="/static/app.js"></script>
 </body>
 </html>

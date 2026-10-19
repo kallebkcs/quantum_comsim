@@ -10,7 +10,7 @@ from qiskit.circuit.library import HGate, XGate, ZGate, YGate, CXGate, SdgGate, 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = "quantum-sim-secret-key"
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", ping_timeout=60, ping_interval=20)
 
 # Standardized Bell State <-> 2-Bit String Mapping:
 # |Φ+⟩ <-> 00, |Φ-⟩ <-> 01, |Ψ+⟩ <-> 10, |Ψ-⟩ <-> 11
@@ -200,6 +200,12 @@ class RoomQuantumManager:
             elif state_label == "-":
                 new_sv = Statevector.from_label("1").evolve(HGate(), [0])
                 disp = "|-⟩"
+            elif state_label in ("+i", "R", "y+"):
+                new_sv = Statevector([1 / np.sqrt(2), 1j / np.sqrt(2)])
+                disp = "|+i⟩"
+            elif state_label in ("-i", "L", "y-"):
+                new_sv = Statevector([1 / np.sqrt(2), -1j / np.sqrt(2)])
+                disp = "|-i⟩"
             else:
                 raise ValueError(f"Unknown single-qubit state: {state_label}")
 
@@ -443,6 +449,117 @@ class RoomQuantumManager:
 
         cluster = QuantumCluster(cid, qids, sv)
         self.clusters[cid] = cluster
+        return created
+
+    def distribute_entanglement(self, creator_sid, creator_name, recipient_sids):
+        """
+        Distributes an entangled quantum state across selected recipient users.
+        If len(recipient_sids) == 2: creates Bell pair |Φ+⟩ (qubit 0 -> user 1, qubit 1 -> user 2).
+        If len(recipient_sids) >= 3: creates GHZ state |GHZ_N⟩ (1 qubit per user).
+        """
+        if not recipient_sids or len(recipient_sids) < 2:
+            raise ValueError("Entanglement distribution requires at least 2 participants.")
+        if len(recipient_sids) > 16:
+            raise ValueError("Maximum 16 participants supported for entanglement distribution.")
+
+        n = len(recipient_sids)
+        created = []
+
+        if n == 2:
+            # Create Bell state |Φ+⟩
+            bell_sv = Statevector.from_label("00").evolve(HGate(), [0]).evolve(CXGate(), [0, 1])
+            self.qubit_counter += 1
+            qid1 = f"q{self.qubit_counter}"
+            num1 = self.qubit_counter
+
+            self.qubit_counter += 1
+            qid2 = f"q{self.qubit_counter}"
+            num2 = self.qubit_counter
+
+            pair_id = f"dist_pair_{num1}_{num2}"
+            disp = "|Φ+⟩"
+
+            self.cluster_counter += 1
+            cid = f"c_{self.cluster_counter}"
+            cluster = QuantumCluster(cid, [qid1, qid2], bell_sv)
+            self.clusters[cid] = cluster
+            self.qubit_to_cluster[qid1] = cid
+            self.qubit_to_cluster[qid2] = cid
+
+            meta1 = {
+                "id": qid1,
+                "number": num1,
+                "cluster_id": cid,
+                "owner_sid": recipient_sids[0],
+                "creator_sid": creator_sid,
+                "creator_name": f"D.E. ({creator_name})",
+                "prep_label": f"{disp} (D.E. Part A)",
+                "display_label": f"{disp} (D.E. Part A)",
+                "pair_id": pair_id,
+                "pair_type": disp,
+                "paired_with": qid2,
+                "is_measured": False,
+                "transferred": recipient_sids[0] != creator_sid,
+                "created_at": time.time(),
+            }
+            meta2 = {
+                "id": qid2,
+                "number": num2,
+                "cluster_id": cid,
+                "owner_sid": recipient_sids[1],
+                "creator_sid": creator_sid,
+                "creator_name": f"D.E. ({creator_name})",
+                "prep_label": f"{disp} (D.E. Part B)",
+                "display_label": f"{disp} (D.E. Part B)",
+                "pair_id": pair_id,
+                "pair_type": disp,
+                "paired_with": qid1,
+                "is_measured": False,
+                "transferred": recipient_sids[1] != creator_sid,
+                "created_at": time.time(),
+            }
+            self.qubits[qid1] = meta1
+            self.qubits[qid2] = meta2
+            created.extend([meta1, meta2])
+        else:
+            # Create GHZ_N state
+            sv = Statevector.from_label("0" * n).evolve(HGate(), [0])
+            for k in range(1, n):
+                sv = sv.evolve(CXGate(), [0, k])
+
+            self.cluster_counter += 1
+            cid = f"c_{self.cluster_counter}"
+            qids = []
+            start_num = self.qubit_counter + 1
+
+            for k, r_sid in enumerate(recipient_sids):
+                self.qubit_counter += 1
+                qid = f"q{self.qubit_counter}"
+                qids.append(qid)
+                disp = f"|GHZ_{n}⟩ (Part {k})"
+                meta = {
+                    "id": qid,
+                    "number": self.qubit_counter,
+                    "cluster_id": cid,
+                    "owner_sid": r_sid,
+                    "creator_sid": creator_sid,
+                    "creator_name": f"D.E. ({creator_name})",
+                    "prep_label": disp,
+                    "display_label": disp,
+                    "is_measured": False,
+                    "transferred": r_sid != creator_sid,
+                    "pair_id": f"dist_ghz_{start_num}_{start_num + n - 1}",
+                    "pair_type": f"|GHZ_{n}⟩",
+                    "paired_with": None,
+                    "created_at": time.time(),
+                }
+                self.qubits[qid] = meta
+                self.qubit_to_cluster[qid] = cid
+                created.append(meta)
+
+            cluster = QuantumCluster(cid, qids, sv)
+            self.clusters[cid] = cluster
+
         return created
 
     def batch_encode_qubits(self, owner_sid, owner_name, bits_str, bases_str):
@@ -980,7 +1097,8 @@ class RoomQuantumManager:
 
         for qid, meta in sorted(self.qubits.items(), key=lambda x: x[1]["number"]):
             if meta["owner_sid"] == user_sid and not meta["is_measured"]:
-                is_unknown = meta["transferred"] or (meta["creator_sid"] != user_sid)
+                is_de = str(meta.get("pair_id", "")).startswith("dist_")
+                is_unknown = (meta["transferred"] or (meta["creator_sid"] != user_sid)) and not is_de
                 lbl = meta.get("display_label") or meta.get("prep_label")
                 active_qubits.append({
                     "id": meta["id"],
@@ -1036,13 +1154,17 @@ rooms = {}
 clients = {}
 
 
-def get_or_create_room(room_name):
+def get_or_create_room(room_name, password="", max_users=8, is_public=True):
     if room_name not in rooms:
         rooms[room_name] = {
             "manager": RoomQuantumManager(room_name),
             "users": {},
             "chat_history": [],
             "quantum_logs": [],
+            "password": str(password or ""),
+            "max_users": int(max_users or 8),
+            "is_public": bool(is_public),
+            "created_at": time.time(),
         }
     return rooms[room_name]
 
@@ -1059,6 +1181,9 @@ def broadcast_room_state(room_name):
         "room": room_name,
         "users": user_list,
         "active_qubits_count": active_count,
+        "max_users": room_data.get("max_users", 8),
+        "is_public": room_data.get("is_public", True),
+        "has_password": bool(room_data.get("password")),
     }, room=room_name)
 
     for sid in room_data["users"]:
@@ -1092,6 +1217,24 @@ def log_quantum_event(room_name, event_type, message, to_sid=None):
         emit("quantum_event", event, room=room_name)
 
 
+def broadcast_system_message(room_name, message):
+    """
+    Broadcasts a visible announcement/system message to the Classical Channel room chat.
+    """
+    if room_name not in rooms:
+        return
+    chat_entry = {
+        "sender": "SYSTEM",
+        "message": message,
+        "timestamp": time.strftime("%H:%M:%S"),
+        "sid": "system",
+        "mode": "system",
+        "to": "Room",
+    }
+    rooms[room_name]["chat_history"].append(chat_entry)
+    socketio.emit("classical_message", chat_entry, to=room_name)
+
+
 # ==============================================================================
 # HTTP Routes
 # ==============================================================================
@@ -1117,23 +1260,76 @@ def on_disconnect():
         username = client["username"]
         if room_name in rooms:
             rooms[room_name]["users"].pop(sid, None)
-            log_quantum_event(room_name, "system", f"Node '{username}' disconnected.")
-            broadcast_room_state(room_name)
+            if len(rooms[room_name]["users"]) == 0:
+                del rooms[room_name]
+            else:
+                broadcast_system_message(room_name, f"Node '{username}' left the room.")
+                log_quantum_event(room_name, "system", f"Node '{username}' disconnected.")
+                broadcast_room_state(room_name)
         del clients[sid]
+
+
+@socketio.on("get_available_rooms")
+def handle_get_available_rooms():
+    """Returns list of public rooms for the Gartic-style room directory."""
+    # Prune any rooms that have zero active users
+    for rname in list(rooms.keys()):
+        if len(rooms[rname]["users"]) == 0:
+            del rooms[rname]
+
+    room_list = []
+    for rname, rdata in rooms.items():
+        if rdata.get("is_public", True) and len(rdata["users"]) > 0:
+            room_list.append({
+                "name": rname,
+                "user_count": len(rdata["users"]),
+                "users": list(rdata["users"].values()),
+                "max_users": rdata.get("max_users", 8),
+                "is_public": rdata.get("is_public", True),
+                "has_password": bool(rdata.get("password")),
+            })
+    emit("available_rooms", room_list)
 
 
 @socketio.on("join_room")
 def handle_join_room(data):
     username = data.get("username", "Anonymous").strip() or "Anonymous"
-    room_name = data.get("room", "lab-1").strip() or "lab-1"
+    room_name = data.get("room", "quantum-lab").strip() or "quantum-lab"
+    password = str(data.get("password", "") or "")
     sid = request.sid
+
+    if room_name in rooms:
+        r = rooms[room_name]
+        # Validate capacity
+        if len(r["users"]) >= r.get("max_users", 32) and sid not in r["users"]:
+            emit("action_error", {"message": f"Room '{room_name}' is full ({len(r['users'])}/{r.get('max_users')} participants)."})
+            return
+        # Validate password if room is password-protected
+        req_pwd = r.get("password", "")
+        if req_pwd and req_pwd != password:
+            emit("action_error", {"message": "Incorrect password."})
+            return
+        # Validate duplicate handle
+        for existing_sid, existing_name in r["users"].items():
+            if existing_sid != sid and existing_name.lower() == username.lower():
+                emit("action_error", {"message": f"The handle '{username}' is already in use in room '{room_name}'."})
+                return
+    else:
+        # Create room with requested settings
+        limit = int(data.get("limit") or data.get("max_users") or 8)
+        is_public = bool(data.get("is_public", True))
+        get_or_create_room(room_name, password=password, max_users=limit, is_public=is_public)
 
     if sid in clients:
         old_room = clients[sid]["room"]
         leave_room(old_room)
         if old_room in rooms:
             rooms[old_room]["users"].pop(sid, None)
-            broadcast_room_state(old_room)
+            if len(rooms[old_room]["users"]) == 0:
+                del rooms[old_room]
+            else:
+                broadcast_system_message(old_room, f"Node '{username}' left the room.")
+                broadcast_room_state(old_room)
 
     clients[sid] = {"username": username, "room": room_name}
     join_room(room_name)
@@ -1141,9 +1337,16 @@ def handle_join_room(data):
     room_data = get_or_create_room(room_name)
     room_data["users"][sid] = username
 
-    emit("chat_history", room_data["chat_history"])
-    emit("quantum_logs_history", room_data["quantum_logs"])
+    emit("join_success", {
+        "room": room_name,
+        "username": username,
+        "sid": sid,
+        "limit": room_data.get("max_users", 8),
+    })
+    emit("chat_history", [])
+    emit("quantum_logs_history", [])
 
+    broadcast_system_message(room_name, f"Node '{username}' joined the room.")
     log_quantum_event(room_name, "system", f"Node '{username}' joined quantum channel room '{room_name}'.")
     broadcast_room_state(room_name)
 
@@ -1153,9 +1356,13 @@ def handle_send_classical_message(data):
     sid = request.sid
     client = clients.get(sid)
     if not client:
+        emit("action_error", {"message": "Session expired or disconnected. Please rejoin the room."})
         return
     room_name = client["room"]
     message = data.get("message", "").strip()
+    mode = data.get("mode", "public")
+    target_sid = data.get("target_sid")
+    target_name = data.get("target_name")
     if not message:
         return
 
@@ -1164,9 +1371,18 @@ def handle_send_classical_message(data):
         "message": message,
         "timestamp": time.strftime("%H:%M:%S"),
         "sid": sid,
+        "mode": mode,
+        "to": target_name,
     }
-    rooms[room_name]["chat_history"].append(chat_entry)
-    emit("classical_message", chat_entry, room=room_name)
+
+    if mode == "private" and target_sid:
+        # Emit to recipient and sender
+        emit("classical_message", chat_entry, to=target_sid)
+        if target_sid != sid:
+            emit("classical_message", chat_entry, to=sid)
+    else:
+        rooms[room_name]["chat_history"].append(chat_entry)
+        socketio.emit("classical_message", chat_entry, to=room_name)
 
 
 @socketio.on("prepare_state")
@@ -1177,12 +1393,12 @@ def handle_prepare_state(data):
     if not client:
         return
     room_name = client["room"]
-    state_type = data.get("state_type")
-    count = int(data.get("count", 1))
+    state_type = data.get("state_type") or data.get("state")
+    count = int(data.get("count") or data.get("quantity") or 1)
     mgr = rooms[room_name]["manager"]
 
     try:
-        if state_type in ("0", "1", "+", "-"):
+        if state_type in ("0", "1", "+", "-", "+i", "-i"):
             metas = mgr.prepare_single_qubit(sid, client["username"], state_type, count=count)
             numbers = [f"#{m['number']}" for m in metas]
             log_quantum_event(
@@ -1287,7 +1503,7 @@ def handle_sample_state(data):
         log_quantum_event(
             room_name,
             "sample",
-            f"📊 Sampled Qubit(s) {', '.join(qnums)} in {basis}-Basis ({shots} shots) ➔ [{freq_str}]",
+            f"Sampled Qubit(s) {', '.join(qnums)} in {basis}-Basis ({shots} shots) -> [{freq_str}]",
             to_sid=sid
         )
         emit("sample_results", sample_results)
@@ -1387,7 +1603,7 @@ def handle_batch_encode_epr(data):
 
     try:
         created, pairs_summary = mgr.batch_encode_epr(sid, client["username"], bits)
-        summary_str = " | ".join(f"{p['bits']}➔{p['bell_state']} (#{p['qubit_a']},#{p['qubit_b']})" for p in pairs_summary)
+        summary_str = " | ".join(f"{p['bits']}->{p['bell_state']} (#{p['qubit_a']},#{p['qubit_b']})" for p in pairs_summary)
         log_quantum_event(
             room_name,
             "prepare",
@@ -1512,16 +1728,17 @@ def handle_send_qubit(data):
         log_quantum_event(
             room_name,
             "transmit",
-            f"⚛ [Quantum Channel] You transmitted {len(metas)} qubit(s) ({', '.join(numbers)}) to {recipient_name}.",
+            f"[Quantum Channel] You transmitted {len(metas)} qubit(s) ({', '.join(numbers)}) to {recipient_name}.",
             to_sid=sid
         )
         # Notify recipient privately
         log_quantum_event(
             room_name,
             "transmit",
-            f"⚛ [Quantum Channel] Received {len(metas)} qubit(s) ({', '.join(numbers)}) from {client['username']}! (Amplitudes unknown: |ψ⟩)",
+            f"[Quantum Channel] Received {len(metas)} qubit(s) ({', '.join(numbers)}) from {client['username']}! (Amplitudes unknown: |ψ⟩)",
             to_sid=target_sid
         )
+        broadcast_system_message(room_name, f"{client['username']} transmitted {len(metas)} qubit(s) to {recipient_name}.")
         broadcast_room_state(room_name)
     except Exception as e:
         emit("action_error", {"message": str(e)})
@@ -1549,14 +1766,14 @@ def handle_measure_batch(data):
             log_quantum_event(
                 room_name,
                 "measure",
-                f"💥 You measured Qubit #{outcomes[0]['number']} in {outcomes[0]['basis_name']} ➔ Bit: [{bitstring}] (Collapsed to {outcomes[0]['eigenstate']})",
+                f"You measured Qubit #{outcomes[0]['number']} in {outcomes[0]['basis_name']} -> Bit: [{bitstring}] (Collapsed to {outcomes[0]['eigenstate']})",
                 to_sid=sid
             )
         else:
             log_quantum_event(
                 room_name,
                 "measure",
-                f"💥 You batch-measured {len(outcomes)} qubits in bases [{rec['bases']}] → Bitstring: [{bitstring}]",
+                f"You batch-measured {len(outcomes)} qubits in bases [{rec['bases']}] -> Bitstring: [{bitstring}]",
                 to_sid=sid
             )
         emit("batch_measure_results", {
@@ -1586,7 +1803,7 @@ def handle_measure_bell(data):
         log_quantum_event(
             room_name,
             "measure",
-            f"💥 You performed Bell Measurement on Qubits #{joint_rec['qubit_a']} & #{joint_rec['qubit_b']} → State: {bell_name} | Encoded Bits: {encoded_bits} (mc={mc}, mt={mt})",
+            f"You performed Bell Measurement on Qubits #{joint_rec['qubit_a']} & #{joint_rec['qubit_b']} -> State: {bell_name} | Encoded Bits: {encoded_bits} (mc={mc}, mt={mt})",
             to_sid=sid
         )
         broadcast_room_state(room_name)
@@ -1616,7 +1833,7 @@ def handle_measure_batch_bell(data):
             log_quantum_event(
                 room_name,
                 "measure",
-                f"💥 You performed Bell Measurement on Qubits #{j['qubit_a']} & #{j['qubit_b']} → State: {j['bell_state']} | Encoded Bits: {j['encoded_bits']} (mc={j['control_bit']}, mt={j['target_bit']})",
+                f"You performed Bell Measurement on Qubits #{j['qubit_a']} & #{j['qubit_b']} -> State: {j['bell_state']} | Encoded Bits: {j['encoded_bits']} (mc={j['control_bit']}, mt={j['target_bit']})",
                 to_sid=sid
             )
         else:
@@ -1624,7 +1841,7 @@ def handle_measure_batch_bell(data):
             log_quantum_event(
                 room_name,
                 "measure",
-                f"💥 You performed Batch Bell Measurement on {len(pairs)} pairs → Decoded Bitstring: [{full_bitstring}] (States: {summary_states})",
+                f"You performed Batch Bell Measurement on {len(pairs)} pairs -> Decoded Bitstring: [{full_bitstring}] (States: {summary_states})",
                 to_sid=sid
             )
         broadcast_room_state(room_name)
@@ -1653,8 +1870,54 @@ def handle_reset_room():
     room_name = client["room"]
     mgr = rooms[room_name]["manager"]
     mgr.reset()
-    log_quantum_event(room_name, "system", f"⚠️ Room quantum registers were reset by {client['username']}.")
+    log_quantum_event(room_name, "system", f"[System] Room quantum registers were reset by {client['username']}.")
+    broadcast_system_message(room_name, f"Room quantum registers were reset by {client['username']}.")
     broadcast_room_state(room_name)
+
+
+@socketio.on("distribute_entanglement")
+def handle_distribute_entanglement(data):
+    """
+    Distributes an entangled quantum state (Bell pair or GHZ) among selected participants.
+    """
+    sid = request.sid
+    client = clients.get(sid)
+    if not client:
+        return
+    room_name = client["room"]
+    recipient_sids = data.get("recipient_sids", [])
+    mgr = rooms[room_name]["manager"]
+
+    if not recipient_sids or len(recipient_sids) < 2:
+        emit("action_error", {"message": "D.E. requires selecting at least 2 connected participants."})
+        return
+
+    try:
+        created = mgr.distribute_entanglement(sid, client["username"], recipient_sids)
+        n = len(recipient_sids)
+        state_name = "|Φ+⟩" if n == 2 else f"|GHZ_{n}⟩"
+
+        # Log private notification to each recipient
+        for meta in created:
+            r_sid = meta["owner_sid"]
+            recipient_name = rooms[room_name]["users"].get(r_sid, "Participant")
+            log_quantum_event(
+                room_name,
+                "transmit",
+                f"[D.E. Distributor] You received entangled qubit #{meta['number']} ({meta['pair_type']}) distributed by {client['username']}.",
+                to_sid=r_sid,
+            )
+
+        log_quantum_event(
+            room_name,
+            "transmit",
+            f"[D.E. Distributor] Distributed {state_name} state among {n} participants.",
+            to_sid=sid,
+        )
+        broadcast_system_message(room_name, f"{client['username']} distributed {state_name} state among {n} participants.")
+        broadcast_room_state(room_name)
+    except Exception as e:
+        emit("action_error", {"message": str(e)})
 
 
 # ==============================================================================
