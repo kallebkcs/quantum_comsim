@@ -125,6 +125,17 @@ class RoomQuantumManager:
         self.joint_measurements = []       # Legacy compatibility
         self.batch_bitstring_records = []  # Legacy compatibility
 
+    MAX_ACTIVE_QUBITS_PER_USER = 64
+    MAX_CLUSTER_QUBITS = 16
+
+    def _check_qubit_limit(self, owner_sid, count_to_add=1):
+        active = sum(1 for q in self.qubits.values() if q["owner_sid"] == owner_sid and not q["is_measured"])
+        if active + count_to_add > self.MAX_ACTIVE_QUBITS_PER_USER:
+            raise ValueError(
+                f"Qubit limit reached. You can hold at most {self.MAX_ACTIVE_QUBITS_PER_USER} active qubits "
+                f"(currently {active}). Measure or clear qubits first."
+            )
+
     def _merge_clusters(self, cluster_ids):
         """
         Merges multiple clusters into a single unified cluster via tensor product (expand).
@@ -139,6 +150,13 @@ class RoomQuantumManager:
             return None
         if len(unique_cids) == 1:
             return self.clusters[unique_cids[0]]
+
+        total_qubits = sum(len(self.clusters[cid].qubit_ids) for cid in unique_cids)
+        if total_qubits > self.MAX_CLUSTER_QUBITS:
+            raise ValueError(
+                f"Entangling these clusters would produce a {total_qubits}-qubit state, "
+                f"exceeding the safety limit of {self.MAX_CLUSTER_QUBITS} qubits."
+            )
 
         main_cluster = self.clusters[unique_cids[0]]
         for other_cid in unique_cids[1:]:
@@ -185,6 +203,7 @@ class RoomQuantumManager:
         """Prepares one or multiple single qubits in a basis state (|0>, |1>, |+>, |->)."""
         state_label = state_label.strip()
         count = max(1, min(100, int(count)))
+        self._check_qubit_limit(owner_sid, count)
         created = []
 
         for _ in range(count):
@@ -253,6 +272,7 @@ class RoomQuantumManager:
             raise ValueError("Theta and Phi must be valid numbers.")
 
         count = max(1, min(100, int(count)))
+        self._check_qubit_limit(owner_sid, count)
         theta_rad = np.deg2rad(theta_deg)
         phi_rad = np.deg2rad(phi_deg)
 
@@ -320,6 +340,7 @@ class RoomQuantumManager:
         """
         bell_type = bell_type.lower().strip()
         count = max(1, min(100, int(count)))
+        self._check_qubit_limit(owner_sid, count * 2)
         created = []
 
         for _ in range(count):
@@ -411,6 +432,7 @@ class RoomQuantumManager:
             raise ValueError("Number of qubits N must be an integer.")
         if n < 3 or n > 16:
             raise ValueError("GHZ state requires 3 ≤ N ≤ 16 qubits.")
+        self._check_qubit_limit(owner_sid, n)
 
         sv = Statevector.from_label("0" * n).evolve(HGate(), [0])
         for k in range(1, n):
@@ -1241,6 +1263,12 @@ def broadcast_system_message(room_name, message):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/health")
+@app.route("/ping")
+def health():
+    return {"status": "ok", "timestamp": time.time(), "rooms_active": len(rooms)}, 200
 
 
 # ==============================================================================

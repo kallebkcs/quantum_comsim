@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: quantum-comsim
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class gthread --threads 32 -w 1 -b 0.0.0.0:$PORT server:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
